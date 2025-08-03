@@ -5,7 +5,7 @@ const path = require('path');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const ExcelJS = require('exceljs');
+const XLSX = require('xlsx');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -785,57 +785,34 @@ app.get(`${BASE_PATH}/api/export/excel`, authenticateToken, requireRole(['manage
             };
         }).filter(item => item['員工姓名'] && item['贈品名稱']);
         
-        // 使用 ExcelJS 建立工作簿
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('贈品庫存報表');
-        
-        // 設定表頭
-        const headers = ['員工姓名', '工號', '所屬門店', '贈品編號', '贈品名稱', '類別', '持有數量', '最後更新'];
-        worksheet.addRow(headers);
-        
-        // 設定表頭樣式
-        const headerRow = worksheet.getRow(1);
-        headerRow.font = { bold: true };
-        headerRow.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FF4472C4' }
-        };
-        
-        // 添加資料
-        exportData.forEach(item => {
-            worksheet.addRow([
-                item['員工姓名'],
-                item['工號'],
-                item['所屬門店'],
-                item['贈品編號'],
-                item['贈品名稱'],
-                item['類別'],
-                item['持有數量'],
-                item['最後更新']
-            ]);
-        });
+        // 建立工作簿
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(exportData);
         
         // 設定欄寬
-        worksheet.columns = [
-            { width: 15 }, // 員工姓名
-            { width: 12 }, // 工號
-            { width: 20 }, // 所屬門店
-            { width: 15 }, // 贈品編號
-            { width: 25 }, // 贈品名稱
-            { width: 12 }, // 類別
-            { width: 12 }, // 持有數量
-            { width: 20 }  // 最後更新
+        const colWidths = [
+            { wch: 12 }, // 員工姓名
+            { wch: 10 }, // 工號
+            { wch: 15 }, // 所屬門店
+            { wch: 12 }, // 贈品編號
+            { wch: 20 }, // 贈品名稱
+            { wch: 10 }, // 類別
+            { wch: 10 }, // 持有數量
+            { wch: 18 }  // 最後更新
         ];
+        ws['!cols'] = colWidths;
+        
+        XLSX.utils.book_append_sheet(wb, ws, '贈品庫存報表');
+        
+        // 生成 Excel 檔案
+        const excelBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
         
         // 設定回應標頭
         const filename = `贈品庫存報表_${new Date().toISOString().split('T')[0]}.xlsx`;
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
         
-        // 寫入回應
-        await workbook.xlsx.write(res);
-        res.end();
+        res.send(excelBuffer);
         
     } catch (error) {
         console.error('Export excel error:', error);
@@ -922,7 +899,7 @@ app.post(`${BASE_PATH}/api/users`, authenticateToken, requireRole(['manager']), 
 app.put(`${BASE_PATH}/api/users/:id`, authenticateToken, requireRole(['manager']), async (req, res) => {
     try {
         const userId = parseInt(req.params.id);
-        const { fullName, employeeId, storeId, role, status } = req.body;
+        const { username, password, fullName, employeeId, storeId, role, status } = req.body;
         const data = await readData();
         
         const userIndex = data.users.findIndex(u => u.id === userId);
@@ -933,20 +910,36 @@ app.put(`${BASE_PATH}/api/users/:id`, authenticateToken, requireRole(['manager']
             });
         }
         
+        // 檢查使用者名稱是否與其他使用者重複
+        if (username) {
+            const existingUser = data.users.find(u => 
+                u.username === username && u.id !== userId
+            );
+            if (existingUser) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: '使用者名稱已存在' 
+                });
+            }
+        }
+        
         // 檢查工號是否與其他使用者重複
-        const existingEmployee = data.users.find(u => 
-            u.employeeId === employeeId && u.id !== userId
-        );
-        if (existingEmployee) {
-            return res.status(400).json({ 
-                success: false, 
-                message: '工號已存在' 
-            });
+        if (employeeId) {
+            const existingEmployee = data.users.find(u => 
+                u.employeeId === employeeId && u.id !== userId
+            );
+            if (existingEmployee) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: '工號已存在' 
+                });
+            }
         }
         
         // 更新使用者資料
-        data.users[userIndex] = {
+        const updatedUser = {
             ...data.users[userIndex],
+            username: username || data.users[userIndex].username,
             fullName: fullName || data.users[userIndex].fullName,
             employeeId: employeeId || data.users[userIndex].employeeId,
             storeId: storeId ? parseInt(storeId) : data.users[userIndex].storeId,
@@ -955,15 +948,109 @@ app.put(`${BASE_PATH}/api/users/:id`, authenticateToken, requireRole(['manager']
             updatedAt: new Date().toISOString()
         };
         
+        // 如果提供了新密碼，則更新密碼
+        if (password && password.trim() !== '') {
+            updatedUser.password = bcrypt.hashSync(password, 10);
+        }
+        
+        data.users[userIndex] = updatedUser;
         await writeData(data);
         
-        const responseUser = { ...data.users[userIndex] };
+        const responseUser = { ...updatedUser };
         delete responseUser.password;
         
         res.json({ success: true, user: responseUser, message: '使用者更新成功' });
         
     } catch (error) {
         console.error('Update user error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
+// 刪除使用者
+app.delete(`${BASE_PATH}/api/users/:id`, authenticateToken, requireRole(['manager']), async (req, res) => {
+    try {
+        const userId = parseInt(req.params.id);
+        const data = await readData();
+        
+        // 檢查是否為當前使用者
+        if (userId === req.user.id) {
+            return res.status(400).json({ 
+                success: false, 
+                message: '無法刪除自己的帳號' 
+            });
+        }
+        
+        const userIndex = data.users.findIndex(u => u.id === userId);
+        if (userIndex === -1) {
+            return res.status(404).json({ 
+                success: false, 
+                message: '使用者不存在' 
+            });
+        }
+        
+        // 刪除使用者
+        data.users.splice(userIndex, 1);
+        
+        // 刪除相關的庫存記錄
+        data.giftInventory = data.giftInventory.filter(inv => inv.userId !== userId);
+        
+        // 刪除相關的申請記錄
+        data.giftRequests = data.giftRequests.filter(req => req.requesterId !== userId);
+        
+        // 刪除相關的交易記錄
+        data.giftTransactions = data.giftTransactions.filter(trans => trans.userId !== userId);
+        
+        await writeData(data);
+        
+        res.json({ success: true, message: '使用者刪除成功' });
+        
+    } catch (error) {
+        console.error('Delete user error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
+// 切換使用者狀態
+app.patch(`${BASE_PATH}/api/users/:id/status`, authenticateToken, requireRole(['manager']), async (req, res) => {
+    try {
+        const userId = parseInt(req.params.id);
+        const { status } = req.body;
+        const data = await readData();
+        
+        // 檢查是否為當前使用者
+        if (userId === req.user.id) {
+            return res.status(400).json({ 
+                success: false, 
+                message: '無法修改自己的帳號狀態' 
+            });
+        }
+        
+        const userIndex = data.users.findIndex(u => u.id === userId);
+        if (userIndex === -1) {
+            return res.status(404).json({ 
+                success: false, 
+                message: '使用者不存在' 
+            });
+        }
+        
+        // 更新使用者狀態
+        data.users[userIndex].status = status;
+        data.users[userIndex].updatedAt = new Date().toISOString();
+        
+        await writeData(data);
+        
+        const responseUser = { ...data.users[userIndex] };
+        delete responseUser.password;
+        
+        res.json({ 
+            success: true, 
+            user: responseUser, 
+            message: `使用者已${status === 'active' ? '啟用' : '停用'}` 
+        });
+        
+    } catch (error) {
+        console.error('Toggle user status error:', error);
         res.status(500).json({ success: false, message: '伺服器錯誤' });
     }
 });
