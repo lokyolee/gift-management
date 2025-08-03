@@ -74,9 +74,9 @@ class GiftManagementApp {
 
         // Navigation events
         document.querySelectorAll('.nav-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', async (e) => {
                 e.preventDefault();
-                this.switchView(btn.dataset.view);
+                await this.switchView(btn.dataset.view);
             });
         });
 
@@ -100,7 +100,9 @@ class GiftManagementApp {
             'transferForm': (e) => this.handleTransferRequest(e),
             'distributionForm': (e) => this.handleDistribution(e),
             'adjustmentForm': (e) => this.handleAdjustment(e),
-            'approvalForm': (e) => this.handleApproval(e)
+            'approvalForm': (e) => this.handleApproval(e),
+            'addEmployeeForm': (e) => this.handleAddEmployee(e),
+            'editEmployeeForm': (e) => this.handleEditEmployee(e)
         };
 
         Object.keys(forms).forEach(formId => {
@@ -135,6 +137,12 @@ class GiftManagementApp {
         const exportBtn = document.getElementById('exportExcel');
         if (exportBtn) {
             exportBtn.addEventListener('click', () => this.exportToExcel());
+        }
+
+        // Employee management functionality
+        const addEmployeeBtn = document.getElementById('addEmployee');
+        if (addEmployeeBtn) {
+            addEmployeeBtn.addEventListener('click', () => this.openAddEmployeeModal());
         }
 
         // Modal events
@@ -198,20 +206,30 @@ class GiftManagementApp {
         this.showLoading(true);
 
         try {
-            // Simulate API call
-            await this.delay(1000);
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            });
 
-            const user = this.data.users.find(u => u.username === username && u.status === 'active');
-            if (user && password === '123456') {
-                this.currentUser = user;
-                const screenName = user.role === 'manager' ? 'manager' : 'employee';
+            const data = await response.json();
+
+            if (data.success) {
+                // Save token and user info
+                localStorage.setItem('token', data.token);
+                this.currentUser = data.user;
+                
+                const screenName = data.user.role === 'manager' ? 'manager' : 'employee';
                 this.showScreen(screenName);
                 this.initializeUserScreen();
-                this.showSuccess(`歡迎，${user.fullName}！`);
+                this.showSuccess(`歡迎，${data.user.fullName}！`);
             } else {
-                this.showError('帳號或密碼錯誤，請檢查輸入');
+                this.showError(data.message || '帳號或密碼錯誤');
             }
         } catch (error) {
+            console.error('Login error:', error);
             this.showError('登入失敗，請稍後再試');
         } finally {
             this.showLoading(false);
@@ -219,7 +237,7 @@ class GiftManagementApp {
     }
 
     // Initialize user screen after login
-    initializeUserScreen() {
+    async initializeUserScreen() {
         if (!this.currentUser) return;
 
         if (this.currentUser.role === 'employee') {
@@ -238,7 +256,7 @@ class GiftManagementApp {
             }
             this.loadDashboard();
             this.loadApprovals();
-            this.loadEmployeeManagement();
+            await this.loadEmployeeManagement();
             this.loadManagerOptions();
             this.switchView('dashboard');
         }
@@ -700,27 +718,44 @@ class GiftManagementApp {
         this.showLoading(false);
     }
 
-    // Load manager options
-    loadManagerOptions() {
-        // Load employee options for adjustment
-        const select = document.getElementById('adjustmentEmployee');
-        if (select) {
-            const employees = this.data.users.filter(u => u.role === 'employee' && u.status === 'active');
-            select.innerHTML = '<option value="">請選擇員工</option>' +
-                employees.map(user => 
-                    `<option value="${user.id}">${user.fullName} (${user.employeeId})</option>`
-                ).join('');
+            // Load manager options
+        loadManagerOptions() {
+            // Load employee options for adjustment
+            const select = document.getElementById('adjustmentEmployee');
+            if (select) {
+                const employees = this.data.users.filter(u => u.role === 'employee' && u.status === 'active');
+                select.innerHTML = '<option value="">請選擇員工</option>' +
+                    employees.map(user => 
+                        `<option value="${user.id}">${user.fullName} (${user.employeeId})</option>`
+                    ).join('');
+            }
+
+            // Load gift options for adjustment
+            const giftSelect = document.getElementById('adjustmentGift');
+            if (giftSelect) {
+                giftSelect.innerHTML = '<option value="">請選擇贈品</option>' +
+                    this.data.gifts.map(gift => 
+                        `<option value="${gift.id}">${gift.giftCode} - ${gift.giftName}</option>`
+                    ).join('');
+            }
+
+            // Load store options for employee management
+            this.loadStoreOptions();
         }
 
-        // Load gift options for adjustment
-        const giftSelect = document.getElementById('adjustmentGift');
-        if (giftSelect) {
-            giftSelect.innerHTML = '<option value="">請選擇贈品</option>' +
-                this.data.gifts.map(gift => 
-                    `<option value="${gift.id}">${gift.giftCode} - ${gift.giftName}</option>`
-                ).join('');
+        // Load store options
+        loadStoreOptions() {
+            const storeSelects = ['newStoreId', 'editStoreId'];
+            storeSelects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                if (select) {
+                    select.innerHTML = '<option value="">請選擇門店</option>' +
+                        this.data.stores.map(store => 
+                            `<option value="${store.id}">${store.storeName}</option>`
+                        ).join('');
+                }
+            });
         }
-    }
 
     // Handle adjustment
     async handleAdjustment(e) {
@@ -785,33 +820,54 @@ class GiftManagementApp {
     }
 
     // Load employee management
-    loadEmployeeManagement() {
+    async loadEmployeeManagement() {
         const container = document.getElementById('employeeList');
         if (!container) return;
 
-        const employees = this.data.users.filter(u => u.status === 'active');
-        
-        container.innerHTML = employees.map(employee => {
-            const store = this.data.stores.find(s => s.id === employee.storeId);
-            return `
-                <div class="employee-card">
-                    <div class="employee-card-header">
-                        <div class="employee-name">${employee.fullName}</div>
-                        <div class="account-role ${employee.role}">${employee.role === 'manager' ? '主管' : '員工'}</div>
+        try {
+            const response = await this.apiCall('/api/users');
+            const employees = response.users || response;
+            
+            container.innerHTML = employees.map(employee => {
+                const store = this.data.stores.find(s => s.id === employee.storeId);
+                const statusClass = employee.status === 'active' ? 'status-active' : 'status-inactive';
+                const statusText = employee.status === 'active' ? '啟用' : '停用';
+                
+                return `
+                    <div class="employee-card ${employee.status === 'inactive' ? 'inactive' : ''}">
+                        <div class="employee-card-header">
+                            <div class="employee-name">${employee.fullName}</div>
+                            <div class="employee-status">
+                                <span class="account-role ${employee.role}">${employee.role === 'manager' ? '主管' : '員工'}</span>
+                                <span class="status-badge ${statusClass}">${statusText}</span>
+                            </div>
+                        </div>
+                        <div class="employee-details">
+                            <div><strong>員工編號:</strong> ${employee.employeeId}</div>
+                            <div><strong>所屬門店:</strong> ${store ? store.storeName : '未知門店'}</div>
+                            <div><strong>帳號:</strong> ${employee.username}</div>
+                            <div><strong>狀態:</strong> ${statusText}</div>
+                        </div>
+                        <div class="employee-actions">
+                            <button class="btn btn--outline btn--sm" onclick="app.editEmployee(${employee.id})">編輯</button>
+                            ${employee.id !== this.currentUser.id ? 
+                                `<button class="btn btn--outline btn--sm" onclick="app.toggleEmployeeStatus(${employee.id})">${employee.status === 'active' ? '停用' : '啟用'}</button>` : ''}
+                            ${employee.id !== this.currentUser.id ? 
+                                `<button class="btn btn--danger btn--sm" onclick="app.deleteEmployee(${employee.id})">刪除</button>` : ''}
+                        </div>
                     </div>
-                    <div class="employee-details">
-                        <div><strong>員工編號:</strong> ${employee.employeeId}</div>
-                        <div><strong>所屬門店:</strong> ${store ? store.storeName : '未知門店'}</div>
-                        <div><strong>帳號:</strong> ${employee.username}</div>
-                    </div>
-                    <div class="employee-actions">
-                        <button class="btn btn--outline btn--sm" onclick="app.editEmployee(${employee.id})">編輯</button>
-                        ${employee.id !== this.currentUser.id ? 
-                            `<button class="btn btn--outline btn--sm" onclick="app.toggleEmployeeStatus(${employee.id})">停用</button>` : ''}
-                    </div>
+                `;
+            }).join('');
+        } catch (error) {
+            console.error('Load employee management error:', error);
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">❌</div>
+                    <div class="empty-state-text">載入員工資料失敗</div>
+                    <div class="empty-state-subtext">${error.message}</div>
                 </div>
             `;
-        }).join('');
+        }
     }
 
     // Export to Excel (simulated)
@@ -1013,7 +1069,7 @@ class GiftManagementApp {
     }
 
     // Switch view within screen
-    switchView(viewName) {
+    async switchView(viewName) {
         if (!viewName) return;
 
         // Update navigation for current screen
@@ -1054,7 +1110,7 @@ class GiftManagementApp {
         } else if (viewName === 'approval') {
             this.loadApprovals();
         } else if (viewName === 'employeeManagement') {
-            this.loadEmployeeManagement();
+            await this.loadEmployeeManagement();
         }
     }
 
@@ -1082,6 +1138,7 @@ class GiftManagementApp {
     // Logout
     logout() {
         this.currentUser = null;
+        localStorage.removeItem('token');
         this.showScreen('login');
         this.resetAllForms();
         this.showSuccess('已安全登出');
@@ -1184,13 +1241,260 @@ class GiftManagementApp {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    // Placeholder functions for employee management
-    editEmployee(employeeId) {
-        this.showToast('編輯功能開發中', 'info');
+    // Employee management functions
+    openAddEmployeeModal() {
+        const modal = document.getElementById('addEmployeeModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            this.resetForm('addEmployeeForm');
+        }
     }
 
-    toggleEmployeeStatus(employeeId) {
-        this.showToast('狀態切換功能開發中', 'info');
+    // API helper functions
+    async apiCall(endpoint, options = {}) {
+        const token = localStorage.getItem('token');
+        const defaultOptions = {
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token && { 'Authorization': `Bearer ${token}` })
+            }
+        };
+        
+        try {
+            const response = await fetch(endpoint, { ...defaultOptions, ...options });
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.message || 'API 請求失敗');
+            }
+            
+            return data;
+        } catch (error) {
+            console.error('API call error:', error);
+            throw error;
+        }
+    }
+
+    closeAddEmployeeModal() {
+        const modal = document.getElementById('addEmployeeModal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    async handleAddEmployee(e) {
+        e.preventDefault();
+        
+        const username = document.getElementById('newUsername').value.trim();
+        const password = document.getElementById('newPassword').value;
+        const fullName = document.getElementById('newFullName').value.trim();
+        const employeeId = document.getElementById('newEmployeeId').value.trim();
+        const storeId = parseInt(document.getElementById('newStoreId').value);
+        const role = document.getElementById('newRole').value;
+
+        if (!username || !password || !fullName || !employeeId || !storeId || !role) {
+            this.showError('請填寫所有必填欄位');
+            return;
+        }
+
+        this.showLoading(true);
+
+        try {
+            const response = await this.apiCall('/api/users', {
+                method: 'POST',
+                body: JSON.stringify({
+                    username,
+                    password,
+                    fullName,
+                    employeeId,
+                    storeId,
+                    role
+                })
+            });
+
+            this.closeAddEmployeeModal();
+            this.loadEmployeeManagement();
+            this.loadManagerOptions(); // Refresh adjustment options
+            this.showSuccess(response.message || '員工新增成功');
+        } catch (error) {
+            this.showError(error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    editEmployee(employeeId) {
+        const employee = this.data.users.find(u => u.id === employeeId);
+        if (!employee) {
+            this.showError('找不到員工資料');
+            return;
+        }
+
+        const modal = document.getElementById('editEmployeeModal');
+        const userIdInput = document.getElementById('editUserId');
+        const usernameInput = document.getElementById('editUsername');
+        const passwordInput = document.getElementById('editPassword');
+        const fullNameInput = document.getElementById('editFullName');
+        const employeeIdInput = document.getElementById('editEmployeeId');
+        const storeIdInput = document.getElementById('editStoreId');
+        const roleInput = document.getElementById('editRole');
+        const statusInput = document.getElementById('editStatus');
+
+        if (!modal || !userIdInput || !usernameInput || !passwordInput || !fullNameInput || 
+            !employeeIdInput || !storeIdInput || !roleInput || !statusInput) {
+            this.showError('表單元素錯誤');
+            return;
+        }
+
+        // Fill form with employee data
+        userIdInput.value = employee.id;
+        usernameInput.value = employee.username;
+        passwordInput.value = ''; // Clear password field
+        fullNameInput.value = employee.fullName;
+        employeeIdInput.value = employee.employeeId;
+        storeIdInput.value = employee.storeId;
+        roleInput.value = employee.role;
+        statusInput.value = employee.status;
+
+        modal.classList.remove('hidden');
+    }
+
+    closeEditEmployeeModal() {
+        const modal = document.getElementById('editEmployeeModal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    async handleEditEmployee(e) {
+        e.preventDefault();
+        
+        const userId = parseInt(document.getElementById('editUserId').value);
+        const username = document.getElementById('editUsername').value.trim();
+        const password = document.getElementById('editPassword').value;
+        const fullName = document.getElementById('editFullName').value.trim();
+        const employeeId = document.getElementById('editEmployeeId').value.trim();
+        const storeId = parseInt(document.getElementById('editStoreId').value);
+        const role = document.getElementById('editRole').value;
+        const status = document.getElementById('editStatus').value;
+
+        if (!userId || !username || !fullName || !employeeId || !storeId || !role || !status) {
+            this.showError('請填寫所有必填欄位');
+            return;
+        }
+
+        this.showLoading(true);
+
+        try {
+            const response = await this.apiCall(`/api/users/${userId}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    username,
+                    password,
+                    fullName,
+                    employeeId,
+                    storeId,
+                    role,
+                    status
+                })
+            });
+
+            this.closeEditEmployeeModal();
+            this.loadEmployeeManagement();
+            this.loadManagerOptions(); // Refresh adjustment options
+            this.showSuccess(response.message || '員工資料更新成功');
+        } catch (error) {
+            this.showError(error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async toggleEmployeeStatus(employeeId) {
+        const employee = this.data.users.find(u => u.id === employeeId);
+        if (!employee) {
+            this.showError('找不到員工資料');
+            return;
+        }
+
+        if (employee.id === this.currentUser.id) {
+            this.showError('無法停用自己的帳號');
+            return;
+        }
+
+        this.showLoading(true);
+
+        try {
+            const newStatus = employee.status === 'active' ? 'inactive' : 'active';
+            const response = await this.apiCall(`/api/users/${employeeId}/status`, {
+                method: 'PATCH',
+                body: JSON.stringify({ status: newStatus })
+            });
+
+            this.loadEmployeeManagement();
+            this.loadManagerOptions(); // Refresh adjustment options
+            this.showSuccess(response.message || `員工已${newStatus === 'active' ? '啟用' : '停用'}`);
+        } catch (error) {
+            this.showError(error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    deleteEmployee(employeeId) {
+        const employee = this.data.users.find(u => u.id === employeeId);
+        if (!employee) {
+            this.showError('找不到員工資料');
+            return;
+        }
+
+        if (employee.id === this.currentUser.id) {
+            this.showError('無法刪除自己的帳號');
+            return;
+        }
+
+        const modal = document.getElementById('deleteConfirmModal');
+        const nameElement = document.getElementById('deleteEmployeeName');
+        
+        if (modal && nameElement) {
+            nameElement.textContent = employee.fullName;
+            modal.dataset.employeeId = employeeId;
+            modal.classList.remove('hidden');
+        }
+    }
+
+    closeDeleteConfirmModal() {
+        const modal = document.getElementById('deleteConfirmModal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    async confirmDeleteEmployee() {
+        const modal = document.getElementById('deleteConfirmModal');
+        const employeeId = parseInt(modal.dataset.employeeId);
+        
+        if (!employeeId) {
+            this.showError('找不到員工資料');
+            return;
+        }
+
+        this.showLoading(true);
+
+        try {
+            const response = await this.apiCall(`/api/users/${employeeId}`, {
+                method: 'DELETE'
+            });
+
+            this.closeDeleteConfirmModal();
+            this.loadEmployeeManagement();
+            this.loadManagerOptions(); // Refresh adjustment options
+            this.showSuccess(response.message || '員工已刪除');
+        } catch (error) {
+            this.showError(error.message);
+        } finally {
+            this.showLoading(false);
+        }
     }
 }
 
