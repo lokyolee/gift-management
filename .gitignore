@@ -1,0 +1,30 @@
+# 依賴套件
+node_modules/
+
+# 日誌檔案
+*.log
+logs/
+
+# 環境變數檔案
+.env
+.env.local
+
+# 作業系統檔案
+.DS_Store
+Thumbs.db
+
+# IDE 檔案
+.vscode/
+.idea/
+
+# PM2 檔案
+.pm2/
+
+# 臨時檔案
+*.tmp
+*.temp
+
+# 可選：如果不想上傳實際資料，可以忽略
+# data/giftSystemData.json
+
+

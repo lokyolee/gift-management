@@ -1,0 +1,182 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "emp001",
+      "password": "$2a$10$SmWzxOjFFUwpG.hlCAXkxOz3GfzGcvt/TrJU80gUI3XdsaOwyyBoK",
+      "fullName": "王小明",
+      "employeeId": "E001",
+      "storeId": 1,
+      "role": "employee",
+      "status": "active",
+      "createdAt": "2025-08-03T18:30:32.936Z",
+      "updatedAt": "2025-08-03T18:30:32.936Z"
+    },
+    {
+      "id": 2,
+      "username": "emp002",
+      "password": "$2a$10$1uvCH3VEil6qU5oLm7RE8.6Ag9z/jEwhyCUhQyhWEd.Tfw.P5dKjS",
+      "fullName": "李小華",
+      "employeeId": "E002",
+      "storeId": 1,
+      "role": "employee",
+      "status": "active",
+      "createdAt": "2025-08-03T18:30:32.936Z",
+      "updatedAt": "2025-08-03T18:30:32.936Z"
+    },
+    {
+      "id": 3,
+      "username": "mgr001",
+      "password": "$2a$10$vIZty1jH9yBR2VD9zwnx4umx6C9Qg2iWMRH06y4sYmqnt7/.RB8OO",
+      "fullName": "張主管",
+      "employeeId": "M001",
+      "storeId": 1,
+      "role": "manager",
+      "status": "active",
+      "createdAt": "2025-08-03T18:30:32.936Z",
+      "updatedAt": "2025-08-03T18:30:32.936Z"
+    }
+  ],
+  "stores": [
+    {
+      "id": 1,
+      "storeName": "台北旗艦店",
+      "storeCode": "TPE001",
+      "address": "台北市信義區信義路五段7號",
+      "status": "active",
+      "createdAt": "2025-08-03T18:30:32.936Z"
+    }
+  ],
+  "gifts": [
+    {
+      "id": 1,
+      "giftCode": "G001",
+      "giftName": "精美手錶",
+      "category": "配件",
+      "description": "高質感商務手錶",
+      "status": "active",
+      "createdAt": "2025-08-03T18:30:32.936Z"
+    },
+    {
+      "id": 2,
+      "giftCode": "G002",
+      "giftName": "咖啡禮盒",
+      "category": "食品",
+      "description": "精選咖啡豆禮盒",
+      "status": "active",
+      "createdAt": "2025-08-03T18:30:32.936Z"
+    },
+    {
+      "id": 3,
+      "giftCode": "G003",
+      "giftName": "保溫杯",
+      "category": "生活用品",
+      "description": "316不鏽鋼保溫杯",
+      "status": "active",
+      "createdAt": "2025-08-03T18:30:32.936Z"
+    },
+    {
+      "id": 4,
+      "giftCode": "G004",
+      "giftName": "藍牙耳機",
+      "category": "電子產品",
+      "description": "無線藍牙立體聲耳機",
+      "status": "active",
+      "createdAt": "2025-08-03T18:30:32.936Z"
+    },
+    {
+      "id": 5,
+      "giftCode": "G005",
+      "giftName": "香水組合",
+      "category": "美妝",
+      "description": "精選香水三件組",
+      "status": "active",
+      "createdAt": "2025-08-03T18:30:32.936Z"
+    }
+  ],
+  "giftInventory": [
+    {
+      "id": 1,
+      "userId": 1,
+      "giftId": 1,
+      "quantity": 5,
+      "lastUpdated": "2025-08-03T18:30:32.936Z"
+    },
+    {
+      "id": 2,
+      "userId": 1,
+      "giftId": 2,
+      "quantity": 10,
+      "lastUpdated": "2025-08-03T18:30:32.936Z"
+    },
+    {
+      "id": 3,
+      "userId": 1,
+      "giftId": 3,
+      "quantity": 8,
+      "lastUpdated": "2025-08-03T18:30:32.936Z"
+    },
+    {
+      "id": 4,
+      "userId": 2,
+      "giftId": 1,
+      "quantity": 3,
+      "lastUpdated": "2025-08-03T18:30:32.936Z"
+    },
+    {
+      "id": 5,
+      "userId": 2,
+      "giftId": 4,
+      "quantity": 6,
+      "lastUpdated": "2025-08-03T18:30:32.936Z"
+    },
+    {
+      "id": 6,
+      "userId": 2,
+      "giftId": 5,
+      "quantity": 4,
+      "lastUpdated": "2025-08-03T18:30:32.936Z"
+    }
+  ],
+  "giftRequests": [
+    {
+      "id": 1,
+      "requesterId": 1,
+      "giftId": 2,
+      "requestType": "increase",
+      "requestedQuantity": 5,
+      "approvedQuantity": null,
+      "targetUserId": null,
+      "purpose": "客戶活動需求",
+      "status": "pending",
+      "approverId": null,
+      "rejectionReason": null,
+      "createdAt": "2025-08-03T18:30:32.936Z",
+      "approvedAt": null
+    },
+    {
+      "id": 2,
+      "requesterId": 2,
+      "giftId": 1,
+      "requestType": "transfer",
+      "requestedQuantity": 2,
+      "approvedQuantity": null,
+      "targetUserId": 1,
+      "purpose": "門店調配需求",
+      "status": "pending",
+      "approverId": null,
+      "rejectionReason": null,
+      "createdAt": "2025-08-03T18:30:32.936Z",
+      "approvedAt": null
+    }
+  ],
+  "giftTransactions": [],
+  "nextIds": {
+    "users": 4,
+    "stores": 2,
+    "gifts": 6,
+    "giftInventory": 7,
+    "giftRequests": 3,
+    "giftTransactions": 1
+  }
+}
