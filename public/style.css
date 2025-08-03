@@ -79,6 +79,23 @@
   --color-warning-rgb: 168, 75, 47;
   --color-info-rgb: 98, 108, 113;
 
+  /* Spacing */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+
+  /* Border radius */
+  --radius-lg: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+  /* Transitions */
+  --duration-fast: 0.15s;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
   /* Typography */
   --font-family-base: "FKGroteskNeue", "Geist", "Inter", -apple-system,
     BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -1228,6 +1245,12 @@ body {
   border-radius: var(--radius-lg);
   padding: var(--space-20);
   box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.employee-card.inactive {
+  opacity: 0.6;
+  background: rgba(var(--color-slate-500-rgb), 0.05);
 }
 
 .employee-card-header {
@@ -1235,6 +1258,40 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--space-12);
+}
+
+.employee-name {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.employee-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+
+.status-badge {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-active {
+  background: rgba(var(--color-success-rgb), var(--status-bg-opacity));
+  color: var(--color-success);
+  border: 1px solid rgba(var(--color-success-rgb), var(--status-border-opacity));
+}
+
+.status-inactive {
+  background: rgba(var(--color-error-rgb), var(--status-bg-opacity));
+  color: var(--color-error);
+  border: 1px solid rgba(var(--color-error-rgb), var(--status-border-opacity));
 }
 
 .employee-details {
@@ -1249,6 +1306,24 @@ body {
   display: flex;
   gap: var(--space-8);
   margin-top: var(--space-16);
+  flex-wrap: wrap;
+}
+
+.btn--danger {
+  background: var(--color-error);
+  color: var(--color-white);
+  border: 1px solid var(--color-error);
+}
+
+.btn--danger:hover {
+  background: rgba(var(--color-error-rgb), 0.9);
+  border-color: rgba(var(--color-error-rgb), 0.9);
+}
+
+.text-warning {
+  color: var(--color-warning);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-8);
 }
 
 /* Bottom navigation */
