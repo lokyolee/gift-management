@@ -266,6 +266,128 @@
             <div id="employeeList" class="employee-list"></div>
         </div>
 
+        <!-- 新增員工彈窗 -->
+        <div id="addEmployeeModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>新增員工</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="addEmployeeForm">
+                        <div class="form-group">
+                            <label class="form-label">帳號</label>
+                            <input type="text" id="newUsername" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">密碼</label>
+                            <input type="password" id="newPassword" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">姓名</label>
+                            <input type="text" id="newFullName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">員工編號</label>
+                            <input type="text" id="newEmployeeId" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">所屬門店</label>
+                            <select id="newStoreId" class="form-control" required>
+                                <option value="">請選擇門店</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">角色</label>
+                            <select id="newRole" class="form-control" required>
+                                <option value="">請選擇角色</option>
+                                <option value="employee">員工</option>
+                                <option value="manager">主管</option>
+                            </select>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn--outline" onclick="app.closeAddEmployeeModal()">取消</button>
+                            <button type="submit" class="btn btn--primary">新增</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 編輯員工彈窗 -->
+        <div id="editEmployeeModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>編輯員工</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="editEmployeeForm">
+                        <input type="hidden" id="editUserId">
+                        <div class="form-group">
+                            <label class="form-label">帳號</label>
+                            <input type="text" id="editUsername" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">新密碼</label>
+                            <input type="password" id="editPassword" class="form-control" placeholder="留空表示不修改">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">姓名</label>
+                            <input type="text" id="editFullName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">員工編號</label>
+                            <input type="text" id="editEmployeeId" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">所屬門店</label>
+                            <select id="editStoreId" class="form-control" required>
+                                <option value="">請選擇門店</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">角色</label>
+                            <select id="editRole" class="form-control" required>
+                                <option value="">請選擇角色</option>
+                                <option value="employee">員工</option>
+                                <option value="manager">主管</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">狀態</label>
+                            <select id="editStatus" class="form-control" required>
+                                <option value="active">啟用</option>
+                                <option value="inactive">停用</option>
+                            </select>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn--outline" onclick="app.closeEditEmployeeModal()">取消</button>
+                            <button type="submit" class="btn btn--primary">更新</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 確認刪除彈窗 -->
+        <div id="deleteConfirmModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>確認刪除</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p>確定要刪除員工 <strong id="deleteEmployeeName"></strong> 嗎？</p>
+                    <p class="text-warning">此操作無法復原，該員工的所有資料將被永久刪除。</p>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn--outline" onclick="app.closeDeleteConfirmModal()">取消</button>
+                        <button type="button" class="btn btn--danger" onclick="app.confirmDeleteEmployee()">確認刪除</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 主管底部導航 -->
         <nav class="bottom-nav">
             <button class="nav-btn active" data-view="dashboard">
