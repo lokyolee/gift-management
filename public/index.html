@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>贈品管理系統</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 登入頁面 -->
+    <div id="loginScreen" class="screen active">
+        <div class="login-container">
+            <div class="login-header">
+                <h1>贈品管理系統</h1>
+                <p>請選擇測試帳號登入</p>
+            </div>
+            
+            <div class="test-accounts">
+                <h3>測試帳號</h3>
+                <div class="account-cards">
+                    <div class="account-card" data-username="emp001" data-password="123456">
+                        <div class="account-role employee">員工</div>
+                        <div class="account-info">
+                            <div class="account-name">王小明</div>
+                            <div class="account-id">員工編號: E001</div>
+                            <div class="account-store">台北旗艦店</div>
+                        </div>
+                    </div>
+                    
+                    <div class="account-card" data-username="emp002" data-password="123456">
+                        <div class="account-role employee">員工</div>
+                        <div class="account-info">
+                            <div class="account-name">李小華</div>
+                            <div class="account-id">員工編號: E002</div>
+                            <div class="account-store">台北旗艦店</div>
+                        </div>
+                    </div>
+                    
+                    <div class="account-card" data-username="mgr001" data-password="123456">
+                        <div class="account-role manager">主管</div>
+                        <div class="account-info">
+                            <div class="account-name">張主管</div>
+                            <div class="account-id">員工編號: M001</div>
+                            <div class="account-store">台北旗艦店</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="username" class="form-label">帳號</label>
+                    <input type="text" id="username" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="password" class="form-label">密碼</label>
+                    <input type="password" id="password" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn--primary btn--full-width">登入系統</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 員工主畫面 -->
+    <div id="employeeScreen" class="screen">
+        <div class="app-header">
+            <h2 id="userWelcome">歡迎，</h2>
+            <button id="logoutBtn" class="btn btn--outline btn--sm">登出</button>
+        </div>
+
+        <!-- 個人庫存頁面 -->
+        <div id="inventoryView" class="view active">
+            <div class="view-header">
+                <h3>我的贈品庫存</h3>
+                <button id="refreshInventory" class="btn btn--secondary btn--sm">重新整理</button>
+            </div>
+            <div id="inventoryList" class="inventory-list"></div>
+        </div>
+
+        <!-- 申請頁面 -->
+        <div id="requestView" class="view">
+            <div class="view-header">
+                <h3>申請作業</h3>
+            </div>
+            
+            <div class="request-tabs">
+                <button class="tab-btn active" data-tab="increase">增發申請</button>
+                <button class="tab-btn" data-tab="transfer">轉移申請</button>
+            </div>
+            
+            <!-- 增發申請表單 -->
+            <div id="increaseTab" class="tab-content active">
+                <form id="increaseForm" class="request-form">
+                    <div class="form-group">
+                        <label class="form-label">選擇贈品</label>
+                        <select id="increaseGift" class="form-control" required>
+                            <option value="">請選擇贈品</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">申請數量</label>
+                        <input type="number" id="increaseQuantity" class="form-control" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">用途說明</label>
+                        <textarea id="increasePurpose" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn--primary btn--full-width">提交申請</button>
+                </form>
+            </div>
+            
+            <!-- 轉移申請表單 -->
+            <div id="transferTab" class="tab-content">
+                <form id="transferForm" class="request-form">
+                    <div class="form-group">
+                        <label class="form-label">接收同事</label>
+                        <select id="transferTarget" class="form-control" required>
+                            <option value="">請選擇同事</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">選擇贈品</label>
+                        <select id="transferGift" class="form-control" required>
+                            <option value="">請選擇贈品</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">轉移數量</label>
+                        <input type="number" id="transferQuantity" class="form-control" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">轉移原因</label>
+                        <textarea id="transferPurpose" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn--primary btn--full-width">提交申請</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 送出登記頁面 -->
+        <div id="distributionView" class="view">
+            <div class="view-header">
+                <h3>當日送出登記</h3>
+            </div>
+            
+            <form id="distributionForm" class="request-form">
+                <div class="form-group">
+                    <label class="form-label">選擇贈品</label>
+                    <select id="distributionGift" class="form-control" required>
+                        <option value="">請選擇贈品</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">送出數量</label>
+                    <input type="number" id="distributionQuantity" class="form-control" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">備註</label>
+                    <textarea id="distributionNote" class="form-control" rows="2" placeholder="選填"></textarea>
+                </div>
+                <button type="submit" class="btn btn--primary btn--full-width">登記送出</button>
+            </form>
+        </div>
+
+        <!-- 申請紀錄頁面 -->
+        <div id="historyView" class="view">
+            <div class="view-header">
+                <h3>申請紀錄</h3>
+                <button id="refreshHistory" class="btn btn--secondary btn--sm">重新整理</button>
+            </div>
+            <div id="historyList" class="history-list"></div>
+        </div>
+
+        <!-- 員工底部導航 -->
+        <nav class="bottom-nav">
+            <button class="nav-btn active" data-view="inventory">
+                <span class="nav-icon">📦</span>
+                <span class="nav-text">庫存</span>
+            </button>
+            <button class="nav-btn" data-view="request">
+                <span class="nav-icon">📝</span>
+                <span class="nav-text">申請</span>
+            </button>
+            <button class="nav-btn" data-view="distribution">
+                <span class="nav-icon">📤</span>
+                <span class="nav-text">送出</span>
+            </button>
+            <button class="nav-btn" data-view="history">
+                <span class="nav-icon">📋</span>
+                <span class="nav-text">紀錄</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- 主管主畫面 -->
+    <div id="managerScreen" class="screen">
+        <div class="app-header">
+            <h2 id="managerWelcome">歡迎，</h2>
+            <button id="managerLogoutBtn" class="btn btn--outline btn--sm">登出</button>
+        </div>
+
+        <!-- 總覽儀表板 -->
+        <div id="dashboardView" class="view active">
+            <div class="view-header">
+                <h3>員工庫存總覽</h3>
+                <div class="dashboard-actions">
+                    <button id="exportExcel" class="btn btn--secondary btn--sm">匯出Excel</button>
+                    <button id="refreshDashboard" class="btn btn--secondary btn--sm">重新整理</button>
+                </div>
+            </div>
+            
+            <div class="search-bar">
+                <input type="text" id="searchInput" class="form-control" placeholder="搜尋員工或贈品...">
+            </div>
+            
+            <div id="dashboardContent" class="dashboard-content"></div>
+        </div>
+
+        <!-- 審批頁面 -->
+        <div id="approvalView" class="view">
+            <div class="view-header">
+                <h3>待審批申請</h3>
+                <button id="refreshApprovals" class="btn btn--secondary btn--sm">重新整理</button>
+            </div>
+            <div id="approvalList" class="approval-list"></div>
+        </div>
+
+        <!-- 手動調整頁面 -->
+        <div id="adjustmentView" class="view">
+            <div class="view-header">
+                <h3>庫存調整</h3>
+            </div>
+            
+            <form id="adjustmentForm" class="request-form">
+                <div class="form-group">
+                    <label class="form-label">選擇員工</label>
+                    <select id="adjustmentEmployee" class="form-control" required>
+                        <option value="">請選擇員工</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">選擇贈品</label>
+                    <select id="adjustmentGift" class="form-control" required>
+                        <option value="">請選擇贈品</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">調整數量</label>
+                    <input type="number" id="adjustmentQuantity" class="form-control" required>
+                    <small class="form-help">正數為增加，負數為減少</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">調整原因</label>
+                    <textarea id="adjustmentReason" class="form-control" rows="3" required></textarea>
+                </div>
+                <button type="submit" class="btn btn--primary btn--full-width">確認調整</button>
+            </form>
+        </div>
+
+        <!-- 員工管理頁面 -->
+        <div id="employeeManagementView" class="view">
+            <div class="view-header">
+                <h3>員工管理</h3>
+                <button id="addEmployee" class="btn btn--primary btn--sm">新增員工</button>
+            </div>
+            <div id="employeeList" class="employee-list"></div>
+        </div>
+
+        <!-- 主管底部導航 -->
+        <nav class="bottom-nav">
+            <button class="nav-btn active" data-view="dashboard">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">總覽</span>
+            </button>
+            <button class="nav-btn" data-view="approval">
+                <span class="nav-icon">✅</span>
+                <span class="nav-text">審批</span>
+            </button>
+            <button class="nav-btn" data-view="adjustment">
+                <span class="nav-icon">⚖️</span>
+                <span class="nav-text">調整</span>
+            </button>
+            <button class="nav-btn" data-view="employeeManagement">
+                <span class="nav-icon">👥</span>
+                <span class="nav-text">員工</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- 載入中遮罩 -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">處理中...</div>
+    </div>
+
+    <!-- 審批彈窗 -->
+    <div id="approvalModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="approvalModalTitle">審批申請</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="approvalDetails"></div>
+                <form id="approvalForm">
+                    <div class="form-group">
+                        <label class="form-label">核准數量</label>
+                        <input type="number" id="approvedQuantity" class="form-control" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">審批意見</label>
+                        <textarea id="approvalComment" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn--outline" id="rejectBtn">駁回</button>
+                        <button type="submit" class="btn btn--primary">核准</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
