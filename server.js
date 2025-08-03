@@ -5,7 +5,7 @@ const path = require('path');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -785,34 +785,57 @@ app.get(`${BASE_PATH}/api/export/excel`, authenticateToken, requireRole(['manage
             };
         }).filter(item => item['員工姓名'] && item['贈品名稱']);
         
-        // 建立工作簿
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.json_to_sheet(exportData);
+        // 使用 ExcelJS 建立工作簿
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('贈品庫存報表');
+        
+        // 設定表頭
+        const headers = ['員工姓名', '工號', '所屬門店', '贈品編號', '贈品名稱', '類別', '持有數量', '最後更新'];
+        worksheet.addRow(headers);
+        
+        // 設定表頭樣式
+        const headerRow = worksheet.getRow(1);
+        headerRow.font = { bold: true };
+        headerRow.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF4472C4' }
+        };
+        
+        // 添加資料
+        exportData.forEach(item => {
+            worksheet.addRow([
+                item['員工姓名'],
+                item['工號'],
+                item['所屬門店'],
+                item['贈品編號'],
+                item['贈品名稱'],
+                item['類別'],
+                item['持有數量'],
+                item['最後更新']
+            ]);
+        });
         
         // 設定欄寬
-        const colWidths = [
-            { wch: 12 }, // 員工姓名
-            { wch: 10 }, // 工號
-            { wch: 15 }, // 所屬門店
-            { wch: 12 }, // 贈品編號
-            { wch: 20 }, // 贈品名稱
-            { wch: 10 }, // 類別
-            { wch: 10 }, // 持有數量
-            { wch: 18 }  // 最後更新
+        worksheet.columns = [
+            { width: 15 }, // 員工姓名
+            { width: 12 }, // 工號
+            { width: 20 }, // 所屬門店
+            { width: 15 }, // 贈品編號
+            { width: 25 }, // 贈品名稱
+            { width: 12 }, // 類別
+            { width: 12 }, // 持有數量
+            { width: 20 }  // 最後更新
         ];
-        ws['!cols'] = colWidths;
-        
-        XLSX.utils.book_append_sheet(wb, ws, '贈品庫存報表');
-        
-        // 生成 Excel 檔案
-        const excelBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
         
         // 設定回應標頭
         const filename = `贈品庫存報表_${new Date().toISOString().split('T')[0]}.xlsx`;
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
         
-        res.send(excelBuffer);
+        // 寫入回應
+        await workbook.xlsx.write(res);
+        res.end();
         
     } catch (error) {
         console.error('Export excel error:', error);
