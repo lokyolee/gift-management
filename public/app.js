@@ -96,6 +96,8 @@ class GiftManagementApp {
         if (token) {
             try {
                 console.log('Found existing token, attempting to restore session...');
+                console.log('Token:', token.substring(0, 20) + '...');
+                
                 // Verify token and restore session
                 const response = await this.apiCall('/api/auth/verify');
                 console.log('Token verification response:', response);
@@ -103,18 +105,29 @@ class GiftManagementApp {
                 if (response && response.success && response.user) {
                     this.currentUser = response.user;
                     console.log('Session restored for user:', this.currentUser.fullName);
+                    console.log('User role:', this.currentUser.role);
                     
-                    this.showScreen(this.currentUser.role === 'manager' ? 'manager' : 'employee');
+                    // Show appropriate screen based on role
+                    const screenName = this.currentUser.role === 'manager' ? 'manager' : 'employee';
+                    console.log('Showing screen:', screenName);
+                    this.showScreen(screenName);
+                    
+                    // Initialize user screen
                     await this.initializeUserScreen();
                     this.showSuccess(`歡迎回來，${this.currentUser.fullName}！`);
                 } else {
                     console.log('Invalid token response, clearing session');
+                    console.log('Response details:', response);
                     // Invalid token, clear and show login
                     localStorage.removeItem('token');
                     this.showScreen('login');
                 }
             } catch (error) {
                 console.error('Token verification failed:', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack
+                });
                 localStorage.removeItem('token');
                 this.showScreen('login');
             }
@@ -372,6 +385,131 @@ Stores: ${state.stores}`;
         }
     }
 
+    // Check API connectivity and status
+    async checkAPIStatus() {
+        try {
+            console.log('Checking API status...');
+            
+            // Try to make a simple API call
+            const response = await this.apiCall('/api/auth/verify');
+            console.log('API status check response:', response);
+            
+            if (response && response.success) {
+                console.log('API is working correctly');
+                return true;
+            } else {
+                console.log('API returned unexpected response');
+                return false;
+            }
+        } catch (error) {
+            console.error('API status check failed:', error);
+            return false;
+        }
+    }
+
+    // Debug session restoration
+    async debugSessionRestoration() {
+        console.log('=== Debug Session Restoration ===');
+        
+        const token = localStorage.getItem('token');
+        console.log('Token exists:', !!token);
+        if (token) {
+            console.log('Token preview:', token.substring(0, 50) + '...');
+        }
+        
+        console.log('Current pathname:', window.location.pathname);
+        console.log('Current user:', this.currentUser);
+        
+        // Check API status
+        const apiWorking = await this.checkAPIStatus();
+        console.log('API working:', apiWorking);
+        
+        console.log('=== End Debug ===');
+        
+        // Show debug info in UI
+        const debugInfo = {
+            hasToken: !!token,
+            currentUser: this.currentUser,
+            apiWorking: apiWorking,
+            pathname: window.location.pathname
+        };
+        
+        this.showDataState('Debug Info', {
+            users: debugInfo.hasToken ? 'Yes' : 'No',
+            inventory: debugInfo.currentUser ? debugInfo.currentUser.fullName || 'undefined' : 'null',
+            requests: debugInfo.apiWorking ? 'Working' : 'Failed',
+            gifts: debugInfo.pathname,
+            stores: debugInfo.currentUser ? debugInfo.currentUser.role || 'unknown' : 'null'
+        });
+        
+        return debugInfo;
+    }
+
+    // Manual session restoration
+    async manualSessionRestoration() {
+        try {
+            console.log('Attempting manual session restoration...');
+            
+            const token = localStorage.getItem('token');
+            if (!token) {
+                this.showError('沒有找到登入令牌');
+                return false;
+            }
+            
+            // Try to verify token again
+            const response = await this.apiCall('/api/auth/verify');
+            if (response && response.success && response.user) {
+                this.currentUser = response.user;
+                console.log('Manual session restoration successful for:', this.currentUser.fullName);
+                
+                // Show appropriate screen
+                const screenName = this.currentUser.role === 'manager' ? 'manager' : 'employee';
+                this.showScreen(screenName);
+                
+                // Initialize user screen
+                await this.initializeUserScreen();
+                this.showSuccess(`會話已手動恢復，歡迎回來 ${this.currentUser.fullName}！`);
+                return true;
+            } else {
+                this.showError('令牌驗證失敗，請重新登入');
+                localStorage.removeItem('token');
+                this.showScreen('login');
+                return false;
+            }
+        } catch (error) {
+            console.error('Manual session restoration failed:', error);
+            this.showError('手動會話恢復失敗：' + error.message);
+            return false;
+        }
+    }
+
+    // Check and fix current user state
+    checkCurrentUserState() {
+        console.log('Checking current user state...');
+        
+        if (!this.currentUser) {
+            console.log('No current user, checking for token...');
+            const token = localStorage.getItem('token');
+            if (token) {
+                console.log('Token found but no user, attempting restoration...');
+                this.manualSessionRestoration();
+            } else {
+                console.log('No token found, redirecting to login...');
+                this.showScreen('login');
+            }
+            return false;
+        }
+        
+        if (!this.currentUser.fullName || this.currentUser.fullName === 'undefined') {
+            console.log('Current user has invalid name, attempting restoration...');
+            this.manualSessionRestoration();
+            return false;
+        }
+        
+        console.log('Current user state is valid:', this.currentUser.fullName);
+        return true;
+    }
+
     // Bind all event listeners
     bindEvents() {
         // Login events - make sure elements exist before binding
@@ -465,6 +603,24 @@ Stores: ${state.stores}`;
         const forceRefreshBtn = document.getElementById('forceRefreshData');
         if (forceRefreshBtn) {
             forceRefreshBtn.addEventListener('click', () => this.forceRefreshData());
+        }
+
+        // Debug session functionality
+        const debugSessionBtn = document.getElementById('debugSession');
+        if (debugSessionBtn) {
+            debugSessionBtn.addEventListener('click', () => this.debugSessionRestoration());
+        }
+
+        // Restore session functionality
+        const restoreSessionBtn = document.getElementById('restoreSession');
+        if (restoreSessionBtn) {
+            restoreSessionBtn.addEventListener('click', () => this.manualSessionRestoration());
+        }
+
+        // Check user state functionality
+        const checkUserStateBtn = document.getElementById('checkUserState');
+        if (checkUserStateBtn) {
+            checkUserStateBtn.addEventListener('click', () => this.checkCurrentUserState());
         }
 
         // Employee management functionality
@@ -1509,6 +1665,15 @@ Stores: ${state.stores}`;
 
     // Switch screen
     showScreen(screenName) {
+        console.log('Switching to screen:', screenName);
+        
+        // Safety check for undefined user
+        if (screenName !== 'login' && (!this.currentUser || !this.currentUser.fullName)) {
+            console.warn('Attempting to show screen without valid user, redirecting to login');
+            this.showScreen('login');
+            return;
+        }
+        
         document.querySelectorAll('.screen').forEach(screen => {
             screen.classList.remove('active');
         });
@@ -1517,6 +1682,11 @@ Stores: ${state.stores}`;
         if (targetScreen) {
             targetScreen.classList.add('active');
             this.currentScreen = screenName;
+            console.log('Successfully switched to screen:', screenName);
+        } else {
+            console.error('Target screen not found:', screenName);
+            // Fallback to login if screen not found
+            this.showScreen('login');
         }
     }
 
@@ -1708,6 +1878,21 @@ Stores: ${state.stores}`;
     // API helper functions
     async apiCall(endpoint, options = {}) {
         const token = localStorage.getItem('token');
+        
+        // Get the current path to determine if we're in a sub-path
+        const currentPath = window.location.pathname;
+        let basePath = '';
+        
+        // Check if we're in a sub-path (e.g., /gift)
+        if (currentPath.includes('/gift')) {
+            basePath = '/gift';
+        }
+        
+        // Construct the full endpoint URL
+        const fullEndpoint = basePath + endpoint;
+        
+        console.log(`API call: ${endpoint} -> ${fullEndpoint}`);
+        
         const defaultOptions = {
             headers: {
                 'Content-Type': 'application/json',
@@ -1716,13 +1901,14 @@ Stores: ${state.stores}`;
         };
         
         try {
-            const response = await fetch(endpoint, { ...defaultOptions, ...options });
-            const data = await response.json();
+            const response = await fetch(fullEndpoint, { ...defaultOptions, ...options });
             
             if (!response.ok) {
-                throw new Error(data.message || 'API 請求失敗');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
             }
             
+            const data = await response.json();
             return data;
         } catch (error) {
             console.error('API call error:', error);
