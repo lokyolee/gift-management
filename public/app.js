@@ -763,6 +763,12 @@ Stores: ${state.stores}`;
             });
         }
 
+        // Test gift API functionality
+        const testGiftAPIBtn = document.getElementById('testGiftAPI');
+        if (testGiftAPIBtn) {
+            testGiftAPIBtn.addEventListener('click', () => this.testGiftAPI());
+        }
+
         // Employee management functionality
         const addEmployeeBtn = document.getElementById('addEmployee');
         if (addEmployeeBtn) {
@@ -2351,8 +2357,13 @@ Stores: ${state.stores}`;
                 try {
                     let response;
                     
+                    console.log('Processing gift row:', row);
+                    console.log('Existing gift:', existingGift);
+                    console.log('Overwrite existing:', overwriteExisting);
+                    
                     if (existingGift && overwriteExisting) {
                         // Update existing gift
+                        console.log('Updating existing gift:', existingGift.id);
                         response = await this.apiCall(`/api/gifts/${existingGift.id}`, {
                             method: 'PUT',
                             body: JSON.stringify({
@@ -2364,6 +2375,13 @@ Stores: ${state.stores}`;
                         });
                     } else {
                         // Create new gift
+                        console.log('Creating new gift with data:', {
+                            giftCode: row['贈品編號'],
+                            giftName: row['贈品名稱'],
+                            category: row['類別'] || '未分類',
+                            status: row['狀態'] === '停用' ? 'inactive' : 'active'
+                        });
+                        
                         response = await this.apiCall('/api/gifts', {
                             method: 'POST',
                             body: JSON.stringify({
@@ -2374,6 +2392,8 @@ Stores: ${state.stores}`;
                             })
                         });
                     }
+                    
+                    console.log('API response:', response);
 
                     if (response.success) {
                         successCount++;
@@ -2408,6 +2428,51 @@ Stores: ${state.stores}`;
         if (importPreview) importPreview.style.display = 'none';
         if (startImportBtn) startImportBtn.disabled = true;
         if (importFileInput) importFileInput.value = '';
+    }
+
+    // Test gift API
+    async testGiftAPI() {
+        try {
+            this.showLoading(true);
+            console.log('Testing gift API...');
+            
+            // Try to create a test gift
+            const response = await this.apiCall('/api/gifts', {
+                method: 'POST',
+                body: JSON.stringify({
+                    giftCode: 'TEST001',
+                    giftName: '測試贈品',
+                    category: '測試類別',
+                    status: 'active'
+                })
+            });
+            
+            console.log('Test gift API response:', response);
+            
+            if (response.success) {
+                this.showSuccess('贈品API測試成功！');
+                
+                // Refresh gifts data
+                await this.loadGiftsData();
+                
+                // Show updated gift count
+                this.showDataState('Gift API Test', {
+                    users: this.data.users.length,
+                    inventory: this.data.giftInventory.length,
+                    requests: this.data.pendingRequests.length,
+                    gifts: this.data.gifts.length,
+                    stores: this.data.stores.length
+                });
+            } else {
+                this.showError('贈品API測試失敗：' + response.message);
+            }
+            
+        } catch (error) {
+            console.error('Test gift API failed:', error);
+            this.showError('贈品API測試失敗：' + error.message);
+        } finally {
+            this.showLoading(false);
+        }
     }
 
     // Handle search
@@ -2772,6 +2837,8 @@ Stores: ${state.stores}`;
         const fullEndpoint = basePath + endpoint;
         
         console.log(`API call: ${endpoint} -> ${fullEndpoint}`);
+        console.log('API call options:', options);
+        console.log('Token exists:', !!token);
         
         const defaultOptions = {
             headers: {
@@ -2782,13 +2849,17 @@ Stores: ${state.stores}`;
         
         try {
             const response = await fetch(fullEndpoint, { ...defaultOptions, ...options });
+            console.log('API response status:', response.status);
+            console.log('API response headers:', response.headers);
             
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
+                console.error('API error response:', errorData);
                 throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
+            console.log('API success response:', data);
             return data;
         } catch (error) {
             console.error('API call error:', error);
