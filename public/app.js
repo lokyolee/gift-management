@@ -706,7 +706,7 @@ Stores: ${state.stores}`;
         // Export functionality
         const exportBtn = document.getElementById('exportExcel');
         if (exportBtn) {
-            exportBtn.addEventListener('click', () => this.exportToExcel());
+            exportBtn.addEventListener('click', () => this.openExportExcelModal());
         }
 
         // Import functionality
@@ -778,6 +778,8 @@ Stores: ${state.stores}`;
                 if (modal) {
                     if (modal.id === 'importExcelModal') {
                         this.closeImportExcelModal();
+                    } else if (modal.id === 'exportExcelModal') {
+                        this.closeExportExcelModal();
                     } else {
                         this.closeModal();
                     }
@@ -1676,56 +1678,251 @@ Stores: ${state.stores}`;
         }
     }
 
-    // Export to Excel (simulated)
-    exportToExcel() {
-        this.showLoading(true);
+    // Open Export Excel Modal
+    openExportExcelModal() {
+        const modal = document.getElementById('exportExcelModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            this.setupExportModal();
+        }
+    }
+
+    // Close Export Excel Modal
+    closeExportExcelModal() {
+        const modal = document.getElementById('exportExcelModal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    // Setup Export Modal
+    setupExportModal() {
+        const startExportBtn = document.getElementById('startExportBtn');
         
-        // Simulate export process
-        setTimeout(() => {
-            const employees = this.data.users.filter(u => u.role === 'employee' && u.status === 'active');
-            let exportData = [];
-            
-            employees.forEach(employee => {
-                const inventory = this.data.giftInventory.filter(inv => inv.userId === employee.id);
-                inventory.forEach(inv => {
-                    const gift = this.data.gifts.find(g => g.id === inv.giftId);
-                    if (gift) {
-                        exportData.push({
-                            員工姓名: employee.fullName,
-                            員工編號: employee.employeeId,
-                            贈品編號: gift.giftCode,
-                            贈品名稱: gift.giftName,
-                            數量: inv.quantity
-                        });
-                    }
-                });
+        if (startExportBtn) {
+            startExportBtn.addEventListener('click', () => {
+                this.startExport();
             });
-            
+        }
+    }
+
+    // Start Export Process
+    async startExport() {
+        const exportType = document.querySelector('input[name="exportType"]:checked').value;
+        const includeInactive = document.getElementById('includeInactive').checked;
+        const includeTimestamps = document.getElementById('includeTimestamps').checked;
+        const exportFormat = document.querySelector('input[name="exportFormat"]:checked').value;
+
+        this.showLoading(true);
+
+        try {
+            let exportData = [];
+            let fileName = '';
+            let headers = [];
+
+            switch (exportType) {
+                case 'inventory':
+                    const result = await this.exportInventory(includeInactive, includeTimestamps);
+                    exportData = result.data;
+                    headers = result.headers;
+                    fileName = `贈品庫存報表_${new Date().toISOString().split('T')[0]}`;
+                    break;
+                case 'employees':
+                    const employeeResult = await this.exportEmployees(includeInactive, includeTimestamps);
+                    exportData = employeeResult.data;
+                    headers = employeeResult.headers;
+                    fileName = `員工資料報表_${new Date().toISOString().split('T')[0]}`;
+                    break;
+                case 'gifts':
+                    const giftResult = await this.exportGifts(includeInactive, includeTimestamps);
+                    exportData = giftResult.data;
+                    headers = giftResult.headers;
+                    fileName = `贈品資料報表_${new Date().toISOString().split('T')[0]}`;
+                    break;
+                default:
+                    throw new Error('不支援的匯出類型');
+            }
+
             if (exportData.length === 0) {
                 this.showError('暫無資料可匯出');
-                this.showLoading(false);
                 return;
             }
-            
-            // Create CSV content
-            const headers = Object.keys(exportData[0]);
-            const csvContent = [
-                headers.join(','),
-                ...exportData.map(row => headers.map(header => row[header]).join(','))
-            ].join('\n');
-            
+
             // Create and download file
-            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `贈品庫存報表_${new Date().toISOString().split('T')[0]}.csv`;
-            link.click();
-            URL.revokeObjectURL(url);
-            
-            this.showLoading(false);
+            if (exportFormat === 'csv') {
+                this.downloadCSV(exportData, headers, fileName);
+            } else {
+                // Excel format (future implementation)
+                this.showError('Excel 格式匯出功能開發中，請使用 CSV 格式');
+            }
+
             this.showSuccess('報表匯出完成');
-        }, 1000);
+            this.closeExportExcelModal();
+
+        } catch (error) {
+            console.error('Export failed:', error);
+            this.showError('匯出失敗：' + error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    // Export Inventory Data
+    async exportInventory(includeInactive, includeTimestamps) {
+        let users = this.data.users;
+        if (!includeInactive) {
+            users = users.filter(u => u.status === 'active');
+        }
+
+        const exportData = [];
+        const headers = ['員工姓名', '員工編號', '贈品編號', '贈品名稱', '數量'];
+        
+        if (includeTimestamps) {
+            headers.push('最後更新時間');
+        }
+
+        users.forEach(employee => {
+            if (employee.role === 'employee') {
+                const inventory = this.data.giftInventory.filter(inv => inv.userId === employee.id);
+                
+                if (inventory.length === 0) {
+                    // Include employees with no inventory
+                    const row = {
+                        員工姓名: employee.fullName,
+                        員工編號: employee.employeeId,
+                        贈品編號: '',
+                        贈品名稱: '',
+                        數量: 0
+                    };
+                    
+                    if (includeTimestamps) {
+                        row['最後更新時間'] = '';
+                    }
+                    
+                    exportData.push(row);
+                } else {
+                    inventory.forEach(inv => {
+                        const gift = this.data.gifts.find(g => g.id === inv.giftId);
+                        if (gift) {
+                            const row = {
+                                員工姓名: employee.fullName,
+                                員工編號: employee.employeeId,
+                                贈品編號: gift.giftCode,
+                                贈品名稱: gift.giftName,
+                                數量: inv.quantity
+                            };
+                            
+                            if (includeTimestamps) {
+                                row['最後更新時間'] = inv.lastUpdated ? new Date(inv.lastUpdated).toLocaleString('zh-TW') : '';
+                            }
+                            
+                            exportData.push(row);
+                        }
+                    });
+                }
+            }
+        });
+
+        return { data: exportData, headers };
+    }
+
+    // Export Employees Data
+    async exportEmployees(includeInactive, includeTimestamps) {
+        let users = this.data.users;
+        if (!includeInactive) {
+            users = users.filter(u => u.status === 'active');
+        }
+
+        const exportData = [];
+        const headers = ['帳號', '姓名', '員工編號', '門市ID', '角色', '狀態'];
+        
+        if (includeTimestamps) {
+            headers.push('建立時間', '最後更新時間');
+        }
+
+        users.forEach(user => {
+            const row = {
+                帳號: user.username,
+                姓名: user.fullName,
+                員工編號: user.employeeId,
+                門市ID: user.storeId,
+                角色: user.role === 'manager' ? '主管' : '員工',
+                狀態: user.status === 'active' ? '啟用' : '停用'
+            };
+            
+            if (includeTimestamps) {
+                row['建立時間'] = user.createdAt ? new Date(user.createdAt).toLocaleString('zh-TW') : '';
+                row['最後更新時間'] = user.updatedAt ? new Date(user.updatedAt).toLocaleString('zh-TW') : '';
+            }
+            
+            exportData.push(row);
+        });
+
+        return { data: exportData, headers };
+    }
+
+    // Export Gifts Data
+    async exportGifts(includeInactive, includeTimestamps) {
+        let gifts = this.data.gifts;
+        if (!includeInactive) {
+            gifts = gifts.filter(g => g.status !== 'inactive');
+        }
+
+        const exportData = [];
+        const headers = ['贈品編號', '贈品名稱', '類別', '狀態'];
+        
+        if (includeTimestamps) {
+            headers.push('建立時間', '最後更新時間');
+        }
+
+        gifts.forEach(gift => {
+            const row = {
+                贈品編號: gift.giftCode,
+                贈品名稱: gift.giftName,
+                類別: gift.category,
+                狀態: gift.status === 'inactive' ? '停用' : '啟用'
+            };
+            
+            if (includeTimestamps) {
+                row['建立時間'] = gift.createdAt ? new Date(gift.createdAt).toLocaleString('zh-TW') : '';
+                row['最後更新時間'] = gift.updatedAt ? new Date(gift.updatedAt).toLocaleString('zh-TW') : '';
+            }
+            
+            exportData.push(row);
+        });
+
+        return { data: exportData, headers };
+    }
+
+    // Download CSV File
+    downloadCSV(data, headers, fileName) {
+        // Create CSV content
+        const csvContent = [
+            headers.join(','),
+            ...data.map(row => headers.map(header => {
+                const value = row[header] || '';
+                // Escape commas and quotes in CSV
+                if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+                    return `"${value.replace(/"/g, '""')}"`;
+                }
+                return value;
+            }).join(','))
+        ].join('\n');
+        
+        // Create and download file
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${fileName}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // Legacy export method (kept for backward compatibility)
+    exportToExcel() {
+        // Redirect to new export modal
+        this.openExportExcelModal();
     }
 
     // Open Import Excel Modal
