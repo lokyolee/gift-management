@@ -14,7 +14,7 @@
                 <h1>贈品管理系統</h1>
                 <p>請選擇測試帳號登入</p>
             </div>
-             
+            
             <div class="test-accounts">
                 <h3>測試帳號</h3>
                 <div class="account-cards">
@@ -205,7 +205,20 @@
                 <h3>員工庫存總覽</h3>
                 <div class="dashboard-actions">
                     <button id="exportExcel" class="btn btn--secondary btn--sm">匯出Excel</button>
+                    <button id="importExcel" class="btn btn--secondary btn--sm">匯入Excel</button>
                     <button id="refreshDashboard" class="btn btn--secondary btn--sm">重新整理</button>
+                    <button id="testDataPersistence" class="btn btn--outline btn--sm">測試資料持久性</button>
+                    <button id="forceRefreshData" class="btn btn--outline btn--sm">強制重新整理</button>
+                    <button id="debugSession" class="btn btn--outline btn--sm">除錯會話</button>
+                    <button id="restoreSession" class="btn btn--outline btn--sm">恢復會話</button>
+                    <button id="checkUserState" class="btn btn--outline btn--sm">檢查用戶狀態</button>
+                    <button id="validateSession" class="btn btn--outline btn--sm">驗證會話</button>
+                    <button id="refreshPersonalInventory" class="btn btn--outline btn--sm">重新整理個人庫存</button>
+                    <button id="testGiftAPI" class="btn btn--outline btn--sm">測試贈品API</button>
+                    <button id="testAPIRouting" class="btn btn--outline btn--sm">測試API路由</button>
+                    <button id="testColleaguesAPI" class="btn btn--outline btn--sm">測試同事API</button>
+                    <button id="debugTransferForm" class="btn btn--outline btn--sm">除錯轉移表單</button>
+                    <button id="refreshEmployeeOptions" class="btn btn--outline btn--sm">重新整理同事選項</button>
                 </div>
             </div>
             
@@ -438,6 +451,152 @@
                         <button type="submit" class="btn btn--primary">核准</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input for Excel import -->
+    <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+    
+    <!-- Import Excel Modal -->
+    <div id="importExcelModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>匯入Excel</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="import-section">
+                    <h4>選擇匯入類型</h4>
+                    <div class="import-options">
+                        <label class="import-option">
+                            <input type="radio" name="importType" value="inventory" checked>
+                            <span>庫存調整</span>
+                        </label>
+                        <label class="import-option">
+                            <input type="radio" name="importType" value="employees">
+                            <span>員工資料</span>
+                        </label>
+                        <label class="import-option">
+                            <input type="radio" name="importType" value="gifts">
+                            <span>贈品資料</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="import-section">
+                    <h4>選擇檔案</h4>
+                    <div class="file-upload-area" id="fileUploadArea">
+                        <div class="file-upload-content">
+                            <div class="file-upload-icon">📁</div>
+                            <div class="file-upload-text">點擊選擇Excel檔案或拖拽檔案到此處</div>
+                            <div class="file-upload-subtext">支援 .xlsx, .xls, .csv 格式</div>
+                        </div>
+                        <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                    </div>
+                    <div class="file-info" id="fileInfo" style="display: none;">
+                        <div class="file-name" id="fileName"></div>
+                        <div class="file-size" id="fileSize"></div>
+                    </div>
+                </div>
+                
+                <div class="import-section">
+                    <h4>匯入選項</h4>
+                    <div class="import-options">
+                        <label class="import-option">
+                            <input type="checkbox" id="overwriteExisting" checked>
+                            <span>覆蓋現有資料</span>
+                        </label>
+                        <label class="import-option">
+                            <input type="checkbox" id="createMissing" checked>
+                            <span>建立缺失的資料</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="import-preview" id="importPreview" style="display: none;">
+                    <h4>資料預覽</h4>
+                    <div class="preview-table-container">
+                        <table class="preview-table" id="previewTable">
+                            <thead>
+                                <tr id="previewHeaders"></tr>
+                            </thead>
+                            <tbody id="previewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn--primary" id="startImportBtn" disabled>開始匯入</button>
+                <button type="button" class="btn btn--secondary" onclick="app.closeImportExcelModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Excel Modal -->
+    <div id="exportExcelModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>匯出Excel</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="export-section">
+                    <h4>選擇匯出類型</h4>
+                    <div class="export-options">
+                        <label class="export-option">
+                            <input type="radio" name="exportType" value="inventory" checked>
+                            <span>庫存報表</span>
+                            <small>包含所有員工的贈品庫存狀況</small>
+                        </label>
+                        <label class="export-option">
+                            <input type="radio" name="exportType" value="employees">
+                            <span>員工資料</span>
+                            <small>包含所有員工的基本資料和狀態</small>
+                        </label>
+                        <label class="export-option">
+                            <input type="radio" name="exportType" value="gifts">
+                            <span>贈品資料</span>
+                            <small>包含所有贈品的基本資料和分類</small>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="export-section">
+                    <h4>匯出選項</h4>
+                    <div class="export-options">
+                        <label class="export-option">
+                            <input type="checkbox" id="includeInactive" checked>
+                            <span>包含停用資料</span>
+                            <small>匯出停用的員工和贈品</small>
+                        </label>
+                        <label class="export-option">
+                            <input type="checkbox" id="includeTimestamps" checked>
+                            <span>包含時間戳記</span>
+                            <small>匯出建立和更新時間</small>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="export-section">
+                    <h4>檔案格式</h4>
+                    <div class="export-options">
+                        <label class="export-option">
+                            <input type="radio" name="exportFormat" value="csv" checked>
+                            <span>CSV 格式</span>
+                            <small>可用 Excel 開啟的逗號分隔檔案</small>
+                        </label>
+                        <label class="export-option">
+                            <input type="radio" name="exportFormat" value="excel" disabled>
+                            <span>Excel 格式</span>
+                            <small>原生 Excel 檔案 (開發中)</small>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn--primary" id="startExportBtn">開始匯出</button>
+                <button type="button" class="btn btn--secondary" onclick="app.closeExportExcelModal()">取消</button>
             </div>
         </div>
     </div>
