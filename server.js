@@ -847,7 +847,7 @@ app.get(`${BASE_PATH}/api/export/excel`, authenticateToken, requireRole(['manage
 // 使用者管理 API (主管)
 // =============================================================================
 
-// 取得所有使用者
+// 取得所有使用者 (主管專用)
 app.get(`${BASE_PATH}/api/users`, authenticateToken, requireRole(['manager']), async (req, res) => {
     try {
         const data = await readData();
@@ -862,6 +862,52 @@ app.get(`${BASE_PATH}/api/users`, authenticateToken, requireRole(['manager']), a
         res.json(users);
     } catch (error) {
         console.error('Get users error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
+// 取得同事列表 (用於轉移申請)
+app.get(`${BASE_PATH}/api/colleagues`, authenticateToken, async (req, res) => {
+    try {
+        const data = await readData();
+        const currentUser = data.users.find(u => u.id === req.user.id);
+        
+        if (!currentUser) {
+            return res.status(404).json({ success: false, message: '使用者不存在' });
+        }
+        
+        let colleagues;
+        
+        if (currentUser.role === 'employee') {
+            // 員工可以看到其他員工和主管
+            colleagues = data.users.filter(u => 
+                u.id !== currentUser.id && 
+                u.status === 'active'
+            );
+        } else if (currentUser.role === 'manager') {
+            // 主管只能看到員工
+            colleagues = data.users.filter(u => 
+                u.id !== currentUser.id && 
+                u.role === 'employee' && 
+                u.status === 'active'
+            );
+        } else {
+            colleagues = [];
+        }
+        
+        // 只返回必要的同事資訊，不包含敏感資料
+        const colleagueList = colleagues.map(user => ({
+            id: user.id,
+            fullName: user.fullName,
+            employeeId: user.employeeId,
+            role: user.role,
+            storeId: user.storeId,
+            status: user.status
+        }));
+        
+        res.json(colleagueList);
+    } catch (error) {
+        console.error('Get colleagues error:', error);
         res.status(500).json({ success: false, message: '伺服器錯誤' });
     }
 });
