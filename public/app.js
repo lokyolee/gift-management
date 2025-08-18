@@ -4,68 +4,137 @@ class GiftManagementApp {
         this.currentUser = null;
         this.currentScreen = 'login';
         this.currentView = 'inventory';
-        this.data = this.initializeData();
+        this.data = this.initializeEmptyData();
         this.init();
     }
 
-    // Initialize sample data
-    initializeData() {
+    // Initialize empty data structure (will be populated from backend)
+    initializeEmptyData() {
         return {
-            users: [
-                {id: 1, username: "emp001", fullName: "王小明", employeeId: "E001", storeId: 1, role: "employee", status: "active"},
-                {id: 2, username: "emp002", fullName: "李小華", employeeId: "E002", storeId: 1, role: "employee", status: "active"},
-                {id: 3, username: "emp003", fullName: "陳大成", employeeId: "E003", storeId: 2, role: "employee", status: "active"},
-                {id: 4, username: "mgr001", fullName: "張主管", employeeId: "M001", storeId: 1, role: "manager", status: "active"},
-                {id: 5, username: "mgr002", fullName: "林經理", employeeId: "M002", storeId: 2, role: "manager", status: "active"}
-            ],
-            stores: [
-                {id: 1, storeName: "台北旗艦店", storeCode: "TPE001", address: "台北市信義區信義路五段7號"},
-                {id: 2, storeName: "台中分店", storeCode: "TXG001", address: "台中市西屯區台灣大道三段99號"}
-            ],
-            gifts: [
-                {id: 1, giftCode: "G001", giftName: "精美手錶", category: "配件", status: "active"},
-                {id: 2, giftCode: "G002", giftName: "咖啡禮盒", category: "食品", status: "active"},
-                {id: 3, giftCode: "G003", giftName: "保溫杯", category: "生活用品", status: "active"},
-                {id: 4, giftCode: "G004", giftName: "藍牙耳機", category: "電子產品", status: "active"},
-                {id: 5, giftCode: "G005", giftName: "香水組合", category: "美妝", status: "active"},
-                {id: 6, giftCode: "G006", giftName: "運動毛巾", category: "運動用品", status: "active"}
-            ],
-            giftInventory: [
-                {userId: 1, giftId: 1, quantity: 5},
-                {userId: 1, giftId: 2, quantity: 12},
-                {userId: 1, giftId: 3, quantity: 8},
-                {userId: 2, giftId: 1, quantity: 3},
-                {userId: 2, giftId: 4, quantity: 7},
-                {userId: 2, giftId: 5, quantity: 4},
-                {userId: 3, giftId: 2, quantity: 6},
-                {userId: 3, giftId: 6, quantity: 10}
-            ],
-            pendingRequests: [
-                {id: 1, requesterId: 1, giftId: 2, requestType: "increase", requestedQuantity: 5, purpose: "客戶活動需求", status: "pending", createdAt: new Date().toISOString()},
-                {id: 2, requesterId: 2, giftId: 1, requestType: "transfer", requestedQuantity: 2, targetUserId: 1, purpose: "門店調配需求", status: "pending", createdAt: new Date().toISOString()},
-                {id: 3, requesterId: 3, giftId: 6, requestType: "increase", requestedQuantity: 15, purpose: "促銷活動準備", status: "pending", createdAt: new Date().toISOString()}
-            ],
+            users: [],
+            stores: [],
+            gifts: [],
+            giftInventory: [],
+            pendingRequests: [],
             requestHistory: [],
             transactionHistory: []
         };
     }
 
+    // Load initial data from backend (called after successful login)
+    async loadInitialData() {
+        try {
+            console.log('Loading initial data from backend...');
+            console.log('Current data state before loading:', {
+                users: this.data.users.length,
+                inventory: this.data.giftInventory.length,
+                requests: this.data.pendingRequests.length,
+                gifts: this.data.gifts.length,
+                stores: this.data.stores.length
+            });
+            
+            // Load all data from backend
+            await Promise.all([
+                this.refreshUserData(),
+                this.refreshInventoryData(),
+                this.refreshRequestData()
+            ]);
+            
+            // Load additional data that might not be in the main refresh methods
+            await this.loadGiftsData();
+            await this.loadStoresData();
+            
+            console.log('Initial data loaded successfully');
+            console.log('Final data state after loading:', {
+                users: this.data.users.length,
+                inventory: this.data.giftInventory.length,
+                requests: this.data.pendingRequests.length,
+                gifts: this.data.gifts.length,
+                stores: this.data.stores.length
+            });
+            
+            // Save snapshot for debugging
+            this.saveDataSnapshot();
+            
+            return true;
+        } catch (error) {
+            console.error('Failed to load initial data:', error);
+            return false;
+        }
+    }
+
+    // Load gifts data
+    async loadGiftsData() {
+        try {
+            const response = await this.apiCall('/api/gifts');
+            if (response && Array.isArray(response)) {
+                this.data.gifts = response;
+            }
+        } catch (error) {
+            console.error('Failed to load gifts data:', error);
+        }
+    }
+
+    // Load stores data
+    async loadStoresData() {
+        try {
+            const response = await this.apiCall('/api/stores');
+            if (response && Array.isArray(response)) {
+                this.data.stores = response;
+            }
+        } catch (error) {
+            console.error('Failed to load stores data:', error);
+        }
+    }
+
     // Initialize application
-    init() {
+    async init() {
         this.bindEvents();
-        this.showScreen('login');
+        
+        // Check if user is already logged in (e.g., after page refresh)
+        const token = localStorage.getItem('token');
+        if (token) {
+            try {
+                // Verify token and restore session
+                const response = await this.apiCall('/api/auth/verify');
+                if (response.success) {
+                    this.currentUser = response.user;
+                    this.showScreen(this.currentUser.role === 'manager' ? 'manager' : 'employee');
+                    await this.initializeUserScreen();
+                    this.showSuccess(`歡迎回來，${this.currentUser.fullName}！`);
+                } else {
+                    // Invalid token, clear and show login
+                    localStorage.removeItem('token');
+                    this.showScreen('login');
+                }
+            } catch (error) {
+                console.error('Token verification failed:', error);
+                localStorage.removeItem('token');
+                this.showScreen('login');
+            }
+        } else {
+            this.showScreen('login');
+        }
     }
 
     // Data synchronization methods
     async refreshUserData() {
         try {
+            console.log('Refreshing user data...');
             const response = await this.apiCall('/api/users');
+            console.log('User data response:', response);
+            
             if (response && response.users) {
                 this.data.users = response.users;
+                console.log(`Loaded ${response.users.length} users from response.users`);
             } else if (Array.isArray(response)) {
                 this.data.users = response;
+                console.log(`Loaded ${response.length} users from direct response`);
+            } else {
+                console.warn('Unexpected user data format:', response);
             }
-            console.log('User data refreshed successfully');
+            
+            console.log('User data refreshed successfully. Current users:', this.data.users.length);
         } catch (error) {
             console.error('Failed to refresh user data:', error);
             // Fallback to local data if API fails
@@ -150,12 +219,111 @@ class GiftManagementApp {
             // Clean up any invalid references
             this.cleanupInvalidReferences();
             
+            // Save current data state for debugging
+            this.saveDataSnapshot();
+            
             console.log('Comprehensive data refresh completed');
             return true;
         } catch (error) {
             console.error('Comprehensive data refresh failed:', error);
             return false;
         }
+    }
+
+    // Save data snapshot for debugging
+    saveDataSnapshot() {
+        try {
+            const snapshot = {
+                timestamp: new Date().toISOString(),
+                userCount: this.data.users.length,
+                inventoryCount: this.data.giftInventory.length,
+                requestCount: this.data.pendingRequests.length,
+                giftCount: this.data.gifts.length,
+                storeCount: this.data.stores.length
+            };
+            
+            localStorage.setItem('dataSnapshot', JSON.stringify(snapshot));
+            console.log('Data snapshot saved:', snapshot);
+        } catch (error) {
+            console.error('Failed to save data snapshot:', error);
+        }
+    }
+
+    // Load data snapshot for debugging
+    loadDataSnapshot() {
+        try {
+            const snapshot = localStorage.getItem('dataSnapshot');
+            if (snapshot) {
+                const data = JSON.parse(snapshot);
+                console.log('Data snapshot loaded:', data);
+                return data;
+            }
+        } catch (error) {
+            console.error('Failed to load data snapshot:', error);
+        }
+        return null;
+    }
+
+    // Debug method to test data persistence
+    async testDataPersistence() {
+        console.log('=== Testing Data Persistence ===');
+        
+        const initialState = {
+            users: this.data.users.length,
+            inventory: this.data.giftInventory.length,
+            requests: this.data.pendingRequests.length,
+            gifts: this.data.gifts.length,
+            stores: this.data.stores.length
+        };
+        
+        console.log('Current data state:', initialState);
+        
+        // Show current state in UI
+        this.showDataState('Initial State', initialState);
+        
+        // Try to load data from backend
+        try {
+            await this.loadInitialData();
+            console.log('Data loaded from backend successfully');
+        } catch (error) {
+            console.error('Failed to load data from backend:', error);
+        }
+        
+        // Check final state
+        const finalState = {
+            users: this.data.users.length,
+            inventory: this.data.giftInventory.length,
+            requests: this.data.pendingRequests.length,
+            gifts: this.data.gifts.length,
+            stores: this.data.stores.length
+        };
+        
+        console.log('Final data state:', finalState);
+        
+        // Show final state in UI
+        this.showDataState('Final State', finalState);
+        
+        // Show sample data if available
+        if (this.data.users.length > 0) {
+            console.log('Sample user:', this.data.users[0]);
+        }
+        if (this.data.giftInventory.length > 0) {
+            console.log('Sample inventory:', this.data.giftInventory[0]);
+        }
+        
+        console.log('=== End Test ===');
+    }
+
+    // Show data state in UI for debugging
+    showDataState(title, state) {
+        const message = `${title}:
+Users: ${state.users}
+Inventory: ${state.inventory}
+Requests: ${state.requests}
+Gifts: ${state.gifts}
+Stores: ${state.stores}`;
+        
+        this.showSuccess(message);
     }
 
     // Bind all event listeners
@@ -239,6 +407,12 @@ class GiftManagementApp {
         const exportBtn = document.getElementById('exportExcel');
         if (exportBtn) {
             exportBtn.addEventListener('click', () => this.exportToExcel());
+        }
+
+        // Test data persistence functionality
+        const testDataBtn = document.getElementById('testDataPersistence');
+        if (testDataBtn) {
+            testDataBtn.addEventListener('click', () => this.testDataPersistence());
         }
 
         // Employee management functionality
@@ -343,10 +517,8 @@ class GiftManagementApp {
         if (!this.currentUser) return;
 
         try {
-            // Refresh all data from backend for consistency
-            await this.refreshUserData();
-            await this.refreshInventoryData();
-            await this.refreshRequestData();
+            // Load all initial data from backend
+            await this.loadInitialData();
             
             // Clean up any invalid references
             this.cleanupInvalidReferences();
