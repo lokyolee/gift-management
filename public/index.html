@@ -205,6 +205,7 @@
                 <h3>員工庫存總覽</h3>
                 <div class="dashboard-actions">
                     <button id="exportExcel" class="btn btn--secondary btn--sm">匯出Excel</button>
+                    <button id="importExcel" class="btn btn--secondary btn--sm">匯入Excel</button>
                     <button id="refreshDashboard" class="btn btn--secondary btn--sm">重新整理</button>
                     <button id="testDataPersistence" class="btn btn--outline btn--sm">測試資料持久性</button>
                     <button id="forceRefreshData" class="btn btn--outline btn--sm">強制重新整理</button>
@@ -445,6 +446,84 @@
                         <button type="submit" class="btn btn--primary">核准</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input for Excel import -->
+    <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+    
+    <!-- Import Excel Modal -->
+    <div id="importExcelModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>匯入Excel</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="import-section">
+                    <h4>選擇匯入類型</h4>
+                    <div class="import-options">
+                        <label class="import-option">
+                            <input type="radio" name="importType" value="inventory" checked>
+                            <span>庫存調整</span>
+                        </label>
+                        <label class="import-option">
+                            <input type="radio" name="importType" value="employees">
+                            <span>員工資料</span>
+                        </label>
+                        <label class="import-option">
+                            <input type="radio" name="importType" value="gifts">
+                            <span>贈品資料</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="import-section">
+                    <h4>選擇檔案</h4>
+                    <div class="file-upload-area" id="fileUploadArea">
+                        <div class="file-upload-content">
+                            <div class="file-upload-icon">📁</div>
+                            <div class="file-upload-text">點擊選擇Excel檔案或拖拽檔案到此處</div>
+                            <div class="file-upload-subtext">支援 .xlsx, .xls, .csv 格式</div>
+                        </div>
+                        <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                    </div>
+                    <div class="file-info" id="fileInfo" style="display: none;">
+                        <div class="file-name" id="fileName"></div>
+                        <div class="file-size" id="fileSize"></div>
+                    </div>
+                </div>
+                
+                <div class="import-section">
+                    <h4>匯入選項</h4>
+                    <div class="import-options">
+                        <label class="import-option">
+                            <input type="checkbox" id="overwriteExisting" checked>
+                            <span>覆蓋現有資料</span>
+                        </label>
+                        <label class="import-option">
+                            <input type="checkbox" id="createMissing" checked>
+                            <span>建立缺失的資料</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="import-preview" id="importPreview" style="display: none;">
+                    <h4>資料預覽</h4>
+                    <div class="preview-table-container">
+                        <table class="preview-table" id="previewTable">
+                            <thead>
+                                <tr id="previewHeaders"></tr>
+                            </thead>
+                            <tbody id="previewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn--primary" id="startImportBtn" disabled>開始匯入</button>
+                <button type="button" class="btn btn--secondary" onclick="app.closeImportExcelModal()">取消</button>
             </div>
         </div>
     </div>
