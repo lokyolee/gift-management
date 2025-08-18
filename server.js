@@ -847,6 +847,25 @@ app.get(`${BASE_PATH}/api/export/excel`, authenticateToken, requireRole(['manage
 // 使用者管理 API (主管)
 // =============================================================================
 
+// 取得所有使用者 (主管專用)
+app.get(`${BASE_PATH}/api/users`, authenticateToken, requireRole(['manager']), async (req, res) => {
+    try {
+        const data = await readData();
+        const users = data.users.map(user => {
+            const store = data.stores.find(s => s.id === user.storeId);
+            return {
+                ...user,
+                password: undefined,
+                store
+            };
+        });
+        res.json(users);
+    } catch (error) {
+        console.error('Get users error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
 // 取得同事列表 (用於轉移申請)
 app.get(`${BASE_PATH}/api/colleagues`, authenticateToken, async (req, res) => {
     try {
@@ -860,10 +879,9 @@ app.get(`${BASE_PATH}/api/colleagues`, authenticateToken, async (req, res) => {
         let colleagues;
         
         if (currentUser.role === 'employee') {
-            // 員工只能看到其他員工 (不包含主管)
+            // 員工可以看到其他員工和主管
             colleagues = data.users.filter(u => 
                 u.id !== currentUser.id && 
-                u.role === 'employee' && 
                 u.status === 'active'
             );
         } else if (currentUser.role === 'manager') {
@@ -890,25 +908,6 @@ app.get(`${BASE_PATH}/api/colleagues`, authenticateToken, async (req, res) => {
         res.json(colleagueList);
     } catch (error) {
         console.error('Get colleagues error:', error);
-        res.status(500).json({ success: false, message: '伺服器錯誤' });
-    }
-});
-
-// 取得所有使用者
-app.get(`${BASE_PATH}/api/users`, authenticateToken, requireRole(['manager']), async (req, res) => {
-    try {
-        const data = await readData();
-        const users = data.users.map(user => {
-            const store = data.stores.find(s => s.id === user.storeId);
-            return {
-                ...user,
-                password: undefined,
-                store
-            };
-        });
-        res.json(users);
-    } catch (error) {
-        console.error('Get users error:', error);
         res.status(500).json({ success: false, message: '伺服器錯誤' });
     }
 });
@@ -1036,7 +1035,7 @@ app.put(`${BASE_PATH}/api/users/:id`, authenticateToken, requireRole(['manager']
         res.status(500).json({ success: false, message: '伺服器錯誤' });
     }
 });
- 
+
 // 刪除使用者
 app.delete(`${BASE_PATH}/api/users/:id`, authenticateToken, requireRole(['manager']), async (req, res) => {
     try {
@@ -1141,6 +1140,114 @@ app.get(`${BASE_PATH}/api/gifts`, authenticateToken, async (req, res) => {
     }
 });
 
+// 新增贈品
+app.post(`${BASE_PATH}/api/gifts`, authenticateToken, requireRole(['manager']), async (req, res) => {
+    try {
+        console.log('Gift creation request received:', req.body);
+        console.log('User:', req.user);
+        
+        const { giftCode, giftName, category, status = 'active' } = req.body;
+        
+        if (!giftCode || !giftName || !category) {
+            console.log('Missing required fields:', { giftCode, giftName, category });
+            return res.status(400).json({ 
+                success: false, 
+                message: '請填寫所有必要欄位' 
+            });
+        }
+        
+        const data = await readData();
+        console.log('Current data loaded, nextIds:', data.nextIds);
+        
+        // 檢查贈品編號是否已存在
+        const existingGift = data.gifts.find(g => g.giftCode === giftCode);
+        if (existingGift) {
+            console.log('Gift code already exists:', giftCode);
+            return res.status(400).json({ 
+                success: false, 
+                message: '贈品編號已存在' 
+            });
+        }
+        
+        // 建立新贈品
+        const newGift = {
+            id: data.nextIds.gifts++,
+            giftCode,
+            giftName,
+            category,
+            status,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        
+        console.log('Creating new gift:', newGift);
+        
+        data.gifts.push(newGift);
+        await writeData(data);
+        
+        console.log('Gift created successfully, new nextIds.gifts:', data.nextIds.gifts);
+        
+        res.json({ 
+            success: true, 
+            gift: newGift,
+            message: '贈品新增成功' 
+        });
+        
+    } catch (error) {
+        console.error('Add gift error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
+// 更新贈品
+app.put(`${BASE_PATH}/api/gifts/:id`, authenticateToken, requireRole(['manager']), async (req, res) => {
+    try {
+        const giftId = parseInt(req.params.id);
+        const { giftCode, giftName, category, status } = req.body;
+        
+        const data = await readData();
+        const giftIndex = data.gifts.findIndex(g => g.id === giftId);
+        
+        if (giftIndex === -1) {
+            return res.status(404).json({ 
+                success: false, 
+                message: '找不到贈品' 
+            });
+        }
+        
+        // 檢查贈品編號是否已被其他贈品使用
+        if (giftCode && giftCode !== data.gifts[giftIndex].giftCode) {
+            const existingGift = data.gifts.find(g => g.giftCode === giftCode && g.id !== giftId);
+            if (existingGift) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: '贈品編號已存在' 
+                });
+            }
+        }
+        
+        // 更新贈品資料
+        if (giftCode) data.gifts[giftIndex].giftCode = giftCode;
+        if (giftName) data.gifts[giftIndex].giftName = giftName;
+        if (category) data.gifts[giftIndex].category = category;
+        if (status !== undefined) data.gifts[giftIndex].status = status;
+        
+        data.gifts[giftIndex].updatedAt = new Date().toISOString();
+        
+        await writeData(data);
+        
+        res.json({ 
+            success: true, 
+            gift: data.gifts[giftIndex],
+            message: '贈品更新成功' 
+        });
+        
+    } catch (error) {
+        console.error('Update gift error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
 // 取得所有門店
 app.get(`${BASE_PATH}/api/stores`, authenticateToken, async (req, res) => {
     try {
@@ -1151,6 +1258,16 @@ app.get(`${BASE_PATH}/api/stores`, authenticateToken, async (req, res) => {
         console.error('Get stores error:', error);
         res.status(500).json({ success: false, message: '伺服器錯誤' });
     }
+});
+
+// Test endpoint to verify API routing
+app.get(`${BASE_PATH}/api/test`, (req, res) => {
+    res.json({ 
+        success: true, 
+        message: 'API test endpoint working',
+        basePath: BASE_PATH,
+        timestamp: new Date().toISOString()
+    });
 });
 
 // =============================================================================
