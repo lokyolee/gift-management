@@ -56,6 +56,108 @@ class GiftManagementApp {
         this.showScreen('login');
     }
 
+    // Data synchronization methods
+    async refreshUserData() {
+        try {
+            const response = await this.apiCall('/api/users');
+            if (response && response.users) {
+                this.data.users = response.users;
+            } else if (Array.isArray(response)) {
+                this.data.users = response;
+            }
+            console.log('User data refreshed successfully');
+        } catch (error) {
+            console.error('Failed to refresh user data:', error);
+            // Fallback to local data if API fails
+        }
+    }
+
+    async refreshInventoryData() {
+        try {
+            const response = await this.apiCall('/api/inventory/all');
+            if (response && Array.isArray(response)) {
+                this.data.giftInventory = response.map(inv => ({
+                    userId: inv.userId,
+                    giftId: inv.giftId,
+                    quantity: inv.quantity,
+                    lastUpdated: inv.lastUpdated
+                }));
+            }
+            console.log('Inventory data refreshed successfully');
+        } catch (error) {
+            console.error('Failed to refresh inventory data:', error);
+        }
+    }
+
+    async refreshRequestData() {
+        try {
+            const response = await this.apiCall('/api/requests/pending');
+            if (response && Array.isArray(response)) {
+                this.data.pendingRequests = response.map(req => ({
+                    id: req.id,
+                    requesterId: req.requesterId,
+                    giftId: req.giftId,
+                    requestType: req.requestType,
+                    requestedQuantity: req.requestedQuantity,
+                    targetUserId: req.targetUserId,
+                    purpose: req.purpose,
+                    status: req.status,
+                    createdAt: req.createdAt
+                }));
+            }
+            console.log('Request data refreshed successfully');
+        } catch (error) {
+            console.error('Failed to refresh request data:', error);
+        }
+    }
+
+    // Validate user exists before operations
+    validateUserExists(userId) {
+        return this.data.users.some(u => u.id === userId && u.status === 'active');
+    }
+
+    // Clean up invalid references
+    cleanupInvalidReferences() {
+        // Clean up inventory with invalid users
+        this.data.giftInventory = this.data.giftInventory.filter(inv => 
+            this.validateUserExists(inv.userId)
+        );
+
+        // Clean up requests with invalid users
+        this.data.pendingRequests = this.data.pendingRequests.filter(req => 
+            this.validateUserExists(req.requesterId) &&
+            (!req.targetUserId || this.validateUserExists(req.targetUserId))
+        );
+
+        // Clean up transaction history with invalid users
+        this.data.transactionHistory = this.data.transactionHistory.filter(trans => 
+            this.validateUserExists(trans.userId)
+        );
+    }
+
+    // Comprehensive data refresh method
+    async refreshAllData() {
+        try {
+            console.log('Starting comprehensive data refresh...');
+            
+            // Refresh all data sources
+            await Promise.all([
+                this.refreshUserData(),
+                this.refreshInventoryData(),
+                this.refreshRequestData()
+            ]);
+            
+            // Clean up any invalid references
+            this.cleanupInvalidReferences();
+            
+            console.log('Comprehensive data refresh completed');
+            return true;
+        } catch (error) {
+            console.error('Comprehensive data refresh failed:', error);
+            return false;
+        }
+    }
+
     // Bind all event listeners
     bindEvents() {
         // Login events - make sure elements exist before binding
@@ -236,29 +338,78 @@ class GiftManagementApp {
         }
     }
 
-    // Initialize user screen after login
+        // Initialize user screen after login
     async initializeUserScreen() {
         if (!this.currentUser) return;
 
-        if (this.currentUser.role === 'employee') {
-            const welcomeEl = document.getElementById('userWelcome');
-            if (welcomeEl) {
-                welcomeEl.textContent = `歡迎，${this.currentUser.fullName}`;
+        try {
+            // Refresh all data from backend for consistency
+            await this.refreshUserData();
+            await this.refreshInventoryData();
+            await this.refreshRequestData();
+            
+            // Clean up any invalid references
+            this.cleanupInvalidReferences();
+
+            if (this.currentUser.role === 'employee') {
+                const welcomeEl = document.getElementById('userWelcome');
+                if (welcomeEl) {
+                    welcomeEl.textContent = `歡迎，${this.currentUser.fullName}`;
+                }
+                this.loadInventory();
+                this.loadGiftOptions();
+                this.loadEmployeeOptions();
+                this.switchView('inventory');
+            } else {
+                const welcomeEl = document.getElementById('managerWelcome');
+                if (welcomeEl) {
+                    welcomeEl.textContent = `歡迎，${this.currentUser.fullName}`;
+                }
+                this.loadDashboard();
+                this.loadApprovals();
+                await this.loadEmployeeManagement();
+                await this.loadManagerOptions();
+                this.switchView('dashboard');
             }
-            this.loadInventory();
-            this.loadGiftOptions();
-            this.loadEmployeeOptions();
-            this.switchView('inventory');
-        } else {
-            const welcomeEl = document.getElementById('managerWelcome');
-            if (welcomeEl) {
-                welcomeEl.textContent = `歡迎，${this.currentUser.fullName}`;
+
+            // Set up periodic data refresh for managers (every 5 minutes)
+            if (this.currentUser.role === 'manager') {
+                this.startPeriodicDataRefresh();
             }
-            this.loadDashboard();
-            this.loadApprovals();
-            await this.loadEmployeeManagement();
-            this.loadManagerOptions();
-            this.switchView('dashboard');
+        } catch (error) {
+            console.error('Failed to initialize user screen:', error);
+            this.showError('初始化失敗，請重新登入');
+        }
+    }
+
+    // Start periodic data refresh for managers
+    startPeriodicDataRefresh() {
+        // Clear any existing interval
+        if (this.dataRefreshInterval) {
+            clearInterval(this.dataRefreshInterval);
+        }
+        
+        // Set up new interval (5 minutes)
+        this.dataRefreshInterval = setInterval(async () => {
+            console.log('Performing periodic data refresh...');
+            await this.refreshAllData();
+            
+            // Refresh current view if it's a data-heavy view
+            if (this.currentView === 'dashboard') {
+                await this.loadDashboard();
+            } else if (this.currentView === 'approval') {
+                await this.loadApprovals();
+            } else if (this.currentView === 'employeeManagement') {
+                await this.loadEmployeeManagement();
+            }
+        }, 5 * 60 * 1000); // 5 minutes
+    }
+
+    // Stop periodic data refresh
+    stopPeriodicDataRefresh() {
+        if (this.dataRefreshInterval) {
+            clearInterval(this.dataRefreshInterval);
+            this.dataRefreshInterval = null;
         }
     }
 
@@ -483,89 +634,138 @@ class GiftManagementApp {
     }
 
     // Load manager dashboard
-    loadDashboard() {
+    async loadDashboard() {
         const container = document.getElementById('dashboardContent');
         if (!container) return;
 
-        const employees = this.data.users.filter(u => u.role === 'employee' && u.status === 'active');
-        
-        container.innerHTML = employees.map(employee => {
-            const store = this.data.stores.find(s => s.id === employee.storeId);
-            const inventory = this.data.giftInventory.filter(inv => inv.userId === employee.id);
+        try {
+            // Ensure we have fresh data
+            if (!this.data.users || this.data.users.length === 0) {
+                await this.refreshUserData();
+            }
+            if (!this.data.giftInventory || this.data.giftInventory.length === 0) {
+                await this.refreshInventoryData();
+            }
+
+            const employees = this.data.users.filter(u => u.role === 'employee' && u.status === 'active');
             
-            return `
-                <div class="employee-section">
-                    <div class="employee-header">
-                        <div>
-                            <div class="employee-name">${employee.fullName}</div>
-                            <div class="employee-info">${employee.employeeId} - ${store ? store.storeName : '未知門店'}</div>
+            if (employees.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">👥</div>
+                        <div class="empty-state-text">暫無員工資料</div>
+                        <div class="empty-state-subtext">請新增員工或檢查系統狀態</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = employees.map(employee => {
+                const store = this.data.stores.find(s => s.id === employee.storeId);
+                const inventory = this.data.giftInventory.filter(inv => inv.userId === employee.id);
+                
+                return `
+                    <div class="employee-section">
+                        <div class="employee-header">
+                            <div>
+                                <div class="employee-name">${employee.fullName}</div>
+                                <div class="employee-info">${employee.employeeId} - ${store ? store.storeName : '未知門店'}</div>
+                            </div>
+                        </div>
+                        <div class="employee-gifts">
+                            ${inventory.length > 0 ? inventory.map(inv => {
+                                const gift = this.data.gifts.find(g => g.id === inv.giftId);
+                                if (!gift) return '';
+                                return `
+                                    <div class="gift-row">
+                                        <div class="gift-info">
+                                            <div class="gift-code">${gift.giftCode}</div>
+                                            <div class="gift-name-small">${gift.giftName}</div>
+                                        </div>
+                                        <div class="gift-quantity-small">${inv.quantity}</div>
+                                    </div>
+                                `;
+                            }).join('') : '<div class="empty-state-text">暫無庫存</div>'}
                         </div>
                     </div>
-                    <div class="employee-gifts">
-                        ${inventory.length > 0 ? inventory.map(inv => {
-                            const gift = this.data.gifts.find(g => g.id === inv.giftId);
-                            if (!gift) return '';
-                            return `
-                                <div class="gift-row">
-                                    <div class="gift-info">
-                                        <div class="gift-code">${gift.giftCode}</div>
-                                        <div class="gift-name-small">${gift.giftName}</div>
-                                    </div>
-                                    <div class="gift-quantity-small">${inv.quantity}</div>
-                                </div>
-                            `;
-                        }).join('') : '<div class="empty-state-text">暫無庫存</div>'}
-                    </div>
+                `;
+            }).join('');
+        } catch (error) {
+            console.error('Failed to load dashboard:', error);
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">❌</div>
+                    <div class="empty-state-text">載入儀表板失敗</div>
+                    <div class="empty-state-subtext">${error.message}</div>
                 </div>
             `;
-        }).join('');
+        }
     }
 
     // Load approvals
-    loadApprovals() {
+    async loadApprovals() {
         const container = document.getElementById('approvalList');
         if (!container) return;
 
-        const pendingRequests = this.data.pendingRequests.filter(req => req.status === 'pending');
-        
-        if (pendingRequests.length === 0) {
+        try {
+            // Ensure we have fresh data
+            if (!this.data.users || this.data.users.length === 0) {
+                await this.refreshUserData();
+            }
+            if (!this.data.pendingRequests || this.data.pendingRequests.length === 0) {
+                await this.refreshRequestData();
+            }
+
+            const pendingRequests = this.data.pendingRequests.filter(req => req.status === 'pending');
+            
+            if (pendingRequests.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">✅</div>
+                        <div class="empty-state-text">暫無待審批申請</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = pendingRequests.map(request => {
+                const requester = this.data.users.find(u => u.id === request.requesterId);
+                const gift = this.data.gifts.find(g => g.id === request.giftId);
+                const targetUser = request.targetUserId ? 
+                    this.data.users.find(u => u.id === request.targetUserId) : null;
+                
+                if (!requester || !gift) return '';
+                
+                return `
+                    <div class="approval-item">
+                        <div class="item-header">
+                            <div class="item-type ${request.requestType}">${request.requestType === 'increase' ? '增發' : '轉移'}</div>
+                            <div class="item-status pending">待審批</div>
+                        </div>
+                        <div class="item-details">
+                            <div><strong>申請人:</strong> ${requester.fullName} (${requester.employeeId})</div>
+                            <div><strong>贈品:</strong> ${gift.giftCode} - ${gift.giftName}</div>
+                            <div><strong>數量:</strong> ${request.requestedQuantity}</div>
+                            ${targetUser ? `<div><strong>接收人:</strong> ${targetUser.fullName} (${targetUser.employeeId})</div>` : ''}
+                            <div><strong>說明:</strong> ${request.purpose}</div>
+                            <div><strong>申請時間:</strong> ${new Date(request.createdAt).toLocaleString('zh-TW')}</div>
+                        </div>
+                        <div class="item-actions">
+                            <button class="btn btn--primary btn--sm" onclick="app.openApprovalModal(${request.id})">處理申請</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (error) {
+            console.error('Failed to load approvals:', error);
             container.innerHTML = `
                 <div class="empty-state">
-                    <div class="empty-state-icon">✅</div>
-                    <div class="empty-state-text">暫無待審批申請</div>
+                    <div class="empty-state-icon">❌</div>
+                    <div class="empty-state-text">載入審批資料失敗</div>
+                    <div class="empty-state-subtext">${error.message}</div>
                 </div>
             `;
-            return;
         }
-
-        container.innerHTML = pendingRequests.map(request => {
-            const requester = this.data.users.find(u => u.id === request.requesterId);
-            const gift = this.data.gifts.find(g => g.id === request.giftId);
-            const targetUser = request.targetUserId ? 
-                this.data.users.find(u => u.id === request.targetUserId) : null;
-            
-            if (!requester || !gift) return '';
-            
-            return `
-                <div class="approval-item">
-                    <div class="item-header">
-                        <div class="item-type ${request.requestType}">${request.requestType === 'increase' ? '增發' : '轉移'}</div>
-                        <div class="item-status pending">待審批</div>
-                    </div>
-                    <div class="item-details">
-                        <div><strong>申請人:</strong> ${requester.fullName} (${requester.employeeId})</div>
-                        <div><strong>贈品:</strong> ${gift.giftCode} - ${gift.giftName}</div>
-                        <div><strong>數量:</strong> ${request.requestedQuantity}</div>
-                        ${targetUser ? `<div><strong>接收人:</strong> ${targetUser.fullName} (${targetUser.employeeId})</div>` : ''}
-                        <div><strong>說明:</strong> ${request.purpose}</div>
-                        <div><strong>申請時間:</strong> ${new Date(request.createdAt).toLocaleString('zh-TW')}</div>
-                    </div>
-                    <div class="item-actions">
-                        <button class="btn btn--primary btn--sm" onclick="app.openApprovalModal(${request.id})">處理申請</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
     }
 
     // Open approval modal
@@ -719,28 +919,37 @@ class GiftManagementApp {
     }
 
             // Load manager options
-        loadManagerOptions() {
-            // Load employee options for adjustment
-            const select = document.getElementById('adjustmentEmployee');
-            if (select) {
-                const employees = this.data.users.filter(u => u.role === 'employee' && u.status === 'active');
-                select.innerHTML = '<option value="">請選擇員工</option>' +
-                    employees.map(user => 
-                        `<option value="${user.id}">${user.fullName} (${user.employeeId})</option>`
-                    ).join('');
-            }
+        async loadManagerOptions() {
+            try {
+                // Ensure we have fresh user data
+                if (!this.data.users || this.data.users.length === 0) {
+                    await this.refreshUserData();
+                }
 
-            // Load gift options for adjustment
-            const giftSelect = document.getElementById('adjustmentGift');
-            if (giftSelect) {
-                giftSelect.innerHTML = '<option value="">請選擇贈品</option>' +
-                    this.data.gifts.map(gift => 
-                        `<option value="${gift.id}">${gift.giftCode} - ${gift.giftName}</option>`
-                    ).join('');
-            }
+                // Load employee options for adjustment
+                const select = document.getElementById('adjustmentEmployee');
+                if (select) {
+                    const employees = this.data.users.filter(u => u.role === 'employee' && u.status === 'active');
+                    select.innerHTML = '<option value="">請選擇員工</option>' +
+                        employees.map(user => 
+                            `<option value="${user.id}">${user.fullName} (${user.employeeId})</option>`
+                        ).join('');
+                }
 
-            // Load store options for employee management
-            this.loadStoreOptions();
+                // Load gift options for adjustment
+                const giftSelect = document.getElementById('adjustmentGift');
+                if (giftSelect) {
+                    giftSelect.innerHTML = '<option value="">請選擇贈品</option>' +
+                        this.data.gifts.map(gift => 
+                            `<option value="${gift.id}">${gift.giftCode} - ${gift.giftName}</option>`
+                        ).join('');
+                }
+
+                // Load store options for employee management
+                this.loadStoreOptions();
+            } catch (error) {
+                console.error('Failed to load manager options:', error);
+            }
         }
 
         // Load store options
@@ -1106,9 +1315,9 @@ class GiftManagementApp {
         } else if (viewName === 'history') {
             this.loadHistory();
         } else if (viewName === 'dashboard') {
-            this.loadDashboard();
+            await this.loadDashboard();
         } else if (viewName === 'approval') {
-            this.loadApprovals();
+            await this.loadApprovals();
         } else if (viewName === 'employeeManagement') {
             await this.loadEmployeeManagement();
         }
@@ -1137,6 +1346,9 @@ class GiftManagementApp {
 
     // Logout
     logout() {
+        // Stop periodic data refresh
+        this.stopPeriodicDataRefresh();
+        
         this.currentUser = null;
         localStorage.removeItem('token');
         this.showScreen('login');
@@ -1313,8 +1525,20 @@ class GiftManagementApp {
             });
 
             this.closeAddEmployeeModal();
+            
+            // Refresh all data to ensure consistency
+            await this.refreshUserData();
+            await this.refreshInventoryData();
+            await this.refreshRequestData();
+            
+            // Clean up any invalid references
+            this.cleanupInvalidReferences();
+            
+            // Refresh displays
             this.loadEmployeeManagement();
-            this.loadManagerOptions(); // Refresh adjustment options
+            await this.loadManagerOptions();
+            this.loadDashboard(); // Refresh dashboard with new data
+            
             this.showSuccess(response.message || '員工新增成功');
         } catch (error) {
             this.showError(error.message);
@@ -1400,8 +1624,20 @@ class GiftManagementApp {
             });
 
             this.closeEditEmployeeModal();
+            
+            // Refresh all data to ensure consistency
+            await this.refreshUserData();
+            await this.refreshInventoryData();
+            await this.refreshRequestData();
+            
+            // Clean up any invalid references
+            this.cleanupInvalidReferences();
+            
+            // Refresh displays
             this.loadEmployeeManagement();
-            this.loadManagerOptions(); // Refresh adjustment options
+            await this.loadManagerOptions();
+            this.loadDashboard(); // Refresh dashboard with updated data
+            
             this.showSuccess(response.message || '員工資料更新成功');
         } catch (error) {
             this.showError(error.message);
@@ -1431,8 +1667,19 @@ class GiftManagementApp {
                 body: JSON.stringify({ status: newStatus })
             });
 
+            // Refresh all data to ensure consistency
+            await this.refreshUserData();
+            await this.refreshInventoryData();
+            await this.refreshRequestData();
+            
+            // Clean up any invalid references
+            this.cleanupInvalidReferences();
+            
+            // Refresh displays
             this.loadEmployeeManagement();
-            this.loadManagerOptions(); // Refresh adjustment options
+            await this.loadManagerOptions();
+            this.loadDashboard(); // Refresh dashboard with updated data
+            
             this.showSuccess(response.message || `員工已${newStatus === 'active' ? '啟用' : '停用'}`);
         } catch (error) {
             this.showError(error.message);
@@ -1487,8 +1734,20 @@ class GiftManagementApp {
             });
 
             this.closeDeleteConfirmModal();
+            
+            // Refresh all data to ensure consistency
+            await this.refreshUserData();
+            await this.refreshInventoryData();
+            await this.refreshRequestData();
+            
+            // Clean up any invalid references
+            this.cleanupInvalidReferences();
+            
+            // Refresh displays
             this.loadEmployeeManagement();
-            this.loadManagerOptions(); // Refresh adjustment options
+            await this.loadManagerOptions();
+            this.loadDashboard(); // Refresh dashboard with updated data
+            
             this.showSuccess(response.message || '員工已刪除');
         } catch (error) {
             this.showError(error.message);
