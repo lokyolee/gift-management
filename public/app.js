@@ -95,14 +95,20 @@ class GiftManagementApp {
         const token = localStorage.getItem('token');
         if (token) {
             try {
+                console.log('Found existing token, attempting to restore session...');
                 // Verify token and restore session
                 const response = await this.apiCall('/api/auth/verify');
-                if (response.success) {
+                console.log('Token verification response:', response);
+                
+                if (response && response.success && response.user) {
                     this.currentUser = response.user;
+                    console.log('Session restored for user:', this.currentUser.fullName);
+                    
                     this.showScreen(this.currentUser.role === 'manager' ? 'manager' : 'employee');
                     await this.initializeUserScreen();
                     this.showSuccess(`歡迎回來，${this.currentUser.fullName}！`);
                 } else {
+                    console.log('Invalid token response, clearing session');
                     // Invalid token, clear and show login
                     localStorage.removeItem('token');
                     this.showScreen('login');
@@ -113,6 +119,7 @@ class GiftManagementApp {
                 this.showScreen('login');
             }
         } else {
+            console.log('No token found, showing login screen');
             this.showScreen('login');
         }
     }
@@ -326,6 +333,45 @@ Stores: ${state.stores}`;
         this.showSuccess(message);
     }
 
+    // Utility method for delays
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Force refresh all data from backend
+    async forceRefreshData() {
+        try {
+            this.showLoading(true);
+            console.log('Force refreshing all data...');
+            
+            // Clear current data
+            this.data = this.initializeEmptyData();
+            
+            // Load fresh data from backend
+            await this.loadInitialData();
+            
+            // Refresh current view
+            if (this.currentUser.role === 'manager') {
+                await this.loadDashboard();
+                await this.loadApprovals();
+                await this.loadEmployeeManagement();
+                await this.loadManagerOptions();
+            } else {
+                this.loadInventory();
+                this.loadGiftOptions();
+                this.loadEmployeeOptions();
+            }
+            
+            this.showSuccess('資料已強制重新整理');
+            console.log('Force refresh completed');
+        } catch (error) {
+            console.error('Force refresh failed:', error);
+            this.showError('強制重新整理失敗：' + error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
     // Bind all event listeners
     bindEvents() {
         // Login events - make sure elements exist before binding
@@ -413,6 +459,12 @@ Stores: ${state.stores}`;
         const testDataBtn = document.getElementById('testDataPersistence');
         if (testDataBtn) {
             testDataBtn.addEventListener('click', () => this.testDataPersistence());
+        }
+
+        // Force refresh data functionality
+        const forceRefreshBtn = document.getElementById('forceRefreshData');
+        if (forceRefreshBtn) {
+            forceRefreshBtn.addEventListener('click', () => this.forceRefreshData());
         }
 
         // Employee management functionality
@@ -517,8 +569,17 @@ Stores: ${state.stores}`;
         if (!this.currentUser) return;
 
         try {
+            console.log('Initializing user screen for:', this.currentUser.fullName);
+            
             // Load all initial data from backend
-            await this.loadInitialData();
+            const dataLoaded = await this.loadInitialData();
+            
+            if (!dataLoaded) {
+                console.warn('Failed to load initial data, retrying...');
+                // Retry once
+                await this.delay(1000);
+                await this.loadInitialData();
+            }
             
             // Clean up any invalid references
             this.cleanupInvalidReferences();
@@ -548,9 +609,14 @@ Stores: ${state.stores}`;
             if (this.currentUser.role === 'manager') {
                 this.startPeriodicDataRefresh();
             }
+            
+            console.log('User screen initialized successfully');
         } catch (error) {
             console.error('Failed to initialize user screen:', error);
             this.showError('初始化失敗，請重新登入');
+            
+            // Force logout on critical error
+            this.logout();
         }
     }
 
@@ -675,23 +741,34 @@ Stores: ${state.stores}`;
         }
 
         this.showLoading(true);
-        await this.delay(500);
-
-        const newRequest = {
-            id: Date.now(),
-            requesterId: this.currentUser.id,
-            giftId: giftId,
-            requestType: 'increase',
-            requestedQuantity: quantity,
-            purpose: purpose,
-            status: 'pending',
-            createdAt: new Date().toISOString()
-        };
-
-        this.data.pendingRequests.push(newRequest);
-        this.showSuccess('增發申請已提交，等待主管審批');
-        this.resetForm('increaseForm');
-        this.showLoading(false);
+        
+        try {
+            // Send request to backend
+            const response = await this.apiCall('/api/requests', {
+                method: 'POST',
+                body: JSON.stringify({
+                    giftId: giftId,
+                    requestType: 'increase',
+                    requestedQuantity: quantity,
+                    purpose: purpose
+                })
+            });
+            
+            if (response.success) {
+                // Update local data after successful backend update
+                await this.refreshAllData();
+                
+                this.showSuccess('增發申請已提交，等待主管審批');
+                this.resetForm('increaseForm');
+            } else {
+                this.showError(response.message || '申請提交失敗');
+            }
+        } catch (error) {
+            console.error('Request submission failed:', error);
+            this.showError('申請提交失敗：' + (error.message || '未知錯誤'));
+        } finally {
+            this.showLoading(false);
+        }
     }
 
     // Handle transfer request
@@ -729,24 +806,35 @@ Stores: ${state.stores}`;
         }
 
         this.showLoading(true);
-        await this.delay(500);
-
-        const newRequest = {
-            id: Date.now(),
-            requesterId: this.currentUser.id,
-            giftId: giftId,
-            requestType: 'transfer',
-            requestedQuantity: quantity,
-            targetUserId: targetUserId,
-            purpose: purpose,
-            status: 'pending',
-            createdAt: new Date().toISOString()
-        };
-
-        this.data.pendingRequests.push(newRequest);
-        this.showSuccess('轉移申請已提交，等待主管審批');
-        this.resetForm('transferForm');
-        this.showLoading(false);
+        
+        try {
+            // Send request to backend
+            const response = await this.apiCall('/api/requests', {
+                method: 'POST',
+                body: JSON.stringify({
+                    giftId: giftId,
+                    requestType: 'transfer',
+                    requestedQuantity: quantity,
+                    targetUserId: targetUserId,
+                    purpose: purpose
+                })
+            });
+            
+            if (response.success) {
+                // Update local data after successful backend update
+                await this.refreshAllData();
+                
+                this.showSuccess('轉移申請已提交，等待主管審批');
+                this.resetForm('transferForm');
+            } else {
+                this.showError(response.message || '申請提交失敗');
+            }
+        } catch (error) {
+            console.error('Request submission failed:', error);
+            this.showError('申請提交失敗：' + (error.message || '未知錯誤'));
+        } finally {
+            this.showLoading(false);
+        }
     }
 
     // Handle distribution
@@ -782,27 +870,34 @@ Stores: ${state.stores}`;
         }
 
         this.showLoading(true);
-        await this.delay(500);
-
-        // Update inventory
-        userInventory.quantity -= quantity;
-
-        // Add to transaction history
-        const transaction = {
-            id: Date.now(),
-            userId: this.currentUser.id,
-            giftId: giftId,
-            type: 'distribution',
-            quantity: -quantity,
-            note: note,
-            createdAt: new Date().toISOString()
-        };
-        this.data.transactionHistory.push(transaction);
-
-        this.showSuccess(`已登記送出 ${quantity} 個贈品`);
-        this.resetForm('distributionForm');
-        this.loadInventory();
-        this.showLoading(false);
+        
+        try {
+            // Send distribution to backend
+            const response = await this.apiCall('/api/inventory/send', {
+                method: 'POST',
+                body: JSON.stringify({
+                    giftId: giftId,
+                    quantity: quantity,
+                    reason: note
+                })
+            });
+            
+            if (response.success) {
+                // Update local data after successful backend update
+                await this.refreshAllData();
+                
+                this.showSuccess(`已登記送出 ${quantity} 個贈品`);
+                this.resetForm('distributionForm');
+                await this.loadInventory();
+            } else {
+                this.showError(response.message || '送出登記失敗');
+            }
+        } catch (error) {
+            console.error('Distribution failed:', error);
+            this.showError('送出登記失敗：' + (error.message || '未知錯誤'));
+        } finally {
+            this.showLoading(false);
+        }
     }
 
     // Load manager dashboard
@@ -1000,63 +1095,34 @@ Stores: ${state.stores}`;
         }
         
         this.showLoading(true);
-        await this.delay(500);
         
-        const request = this.data.pendingRequests.find(r => r.id === requestId);
-        if (!request) {
-            this.showError('找不到申請記錄');
-            this.showLoading(false);
-            return;
-        }
-
-        request.status = 'approved';
-        request.approvedQuantity = approvedQuantity;
-        request.approvalComment = comment;
-        request.approvedAt = new Date().toISOString();
-        
-        // Update inventory based on request type
-        if (request.requestType === 'increase') {
-            let inventory = this.data.giftInventory.find(inv => 
-                inv.userId === request.requesterId && inv.giftId === request.giftId
-            );
-            if (inventory) {
-                inventory.quantity += approvedQuantity;
-            } else {
-                this.data.giftInventory.push({
-                    userId: request.requesterId,
-                    giftId: request.giftId,
-                    quantity: approvedQuantity
-                });
-            }
-        } else if (request.requestType === 'transfer') {
-            // Deduct from requester
-            const fromInventory = this.data.giftInventory.find(inv => 
-                inv.userId === request.requesterId && inv.giftId === request.giftId
-            );
-            if (fromInventory) {
-                fromInventory.quantity -= approvedQuantity;
-            }
+        try {
+            // Send approval to backend
+            const response = await this.apiCall(`/api/requests/${requestId}/approve`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    approvedQuantity: approvedQuantity,
+                    reason: comment
+                })
+            });
             
-            // Add to target user
-            let toInventory = this.data.giftInventory.find(inv => 
-                inv.userId === request.targetUserId && inv.giftId === request.giftId
-            );
-            if (toInventory) {
-                toInventory.quantity += approvedQuantity;
+            if (response.success) {
+                // Update local data after successful backend update
+                await this.refreshAllData();
+                
+                this.closeModal();
+                await this.loadApprovals();
+                await this.loadDashboard();
+                this.showSuccess('申請已核准');
             } else {
-                this.data.giftInventory.push({
-                    userId: request.targetUserId,
-                    giftId: request.giftId,
-                    quantity: approvedQuantity
-                });
+                this.showError(response.message || '核准失敗');
             }
+        } catch (error) {
+            console.error('Approval failed:', error);
+            this.showError('核准失敗：' + (error.message || '未知錯誤'));
+        } finally {
+            this.showLoading(false);
         }
-        
-        this.closeModal();
-        this.loadApprovals();
-        this.loadDashboard();
-        this.showSuccess('申請已核准');
-        this.showLoading(false);
     }
 
     // Reject request
@@ -1075,19 +1141,32 @@ Stores: ${state.stores}`;
         }
         
         this.showLoading(true);
-        await this.delay(500);
         
-        const request = this.data.pendingRequests.find(r => r.id === requestId);
-        if (request) {
-            request.status = 'rejected';
-            request.rejectionComment = comment;
-            request.rejectedAt = new Date().toISOString();
+        try {
+            // Send rejection to backend
+            const response = await this.apiCall(`/api/requests/${requestId}/reject`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    reason: comment
+                })
+            });
+            
+            if (response.success) {
+                // Update local data after successful backend update
+                await this.refreshAllData();
+                
+                this.closeModal();
+                await this.loadApprovals();
+                this.showSuccess('申請已駁回');
+            } else {
+                this.showError(response.message || '駁回失敗');
+            }
+        } catch (error) {
+            console.error('Rejection failed:', error);
+            this.showError('駁回失敗：' + (error.message || '未知錯誤'));
+        } finally {
+            this.showLoading(false);
         }
-        
-        this.closeModal();
-        this.loadApprovals();
-        this.showSuccess('申請已駁回');
-        this.showLoading(false);
     }
 
             // Load manager options
@@ -1163,41 +1242,33 @@ Stores: ${state.stores}`;
         }
 
         this.showLoading(true);
-        await this.delay(500);
-
-        // Find or create inventory record
-        let inventory = this.data.giftInventory.find(inv => 
-            inv.userId === userId && inv.giftId === giftId
-        );
-
-        if (inventory) {
-            inventory.quantity += quantity;
-            if (inventory.quantity < 0) inventory.quantity = 0;
-        } else if (quantity > 0) {
-            this.data.giftInventory.push({
-                userId: userId,
-                giftId: giftId,
-                quantity: quantity
+        
+        try {
+            // Send adjustment to backend
+            const response = await this.apiCall(`/api/inventory/${userId}/${giftId}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    quantity: quantity,
+                    reason: reason
+                })
             });
+            
+            if (response.success) {
+                // Update local data after successful backend update
+                await this.refreshAllData();
+                
+                this.resetForm('adjustmentForm');
+                await this.loadDashboard();
+                this.showSuccess('庫存調整完成');
+            } else {
+                this.showError(response.message || '調整失敗');
+            }
+        } catch (error) {
+            console.error('Adjustment failed:', error);
+            this.showError('調整失敗：' + (error.message || '未知錯誤'));
+        } finally {
+            this.showLoading(false);
         }
-
-        // Add to transaction history
-        const transaction = {
-            id: Date.now(),
-            userId: userId,
-            giftId: giftId,
-            type: 'adjustment',
-            quantity: quantity,
-            reason: reason,
-            adjustedBy: this.currentUser.id,
-            createdAt: new Date().toISOString()
-        };
-        this.data.transactionHistory.push(transaction);
-
-        this.resetForm('adjustmentForm');
-        this.loadDashboard();
-        this.showSuccess('庫存調整完成');
-        this.showLoading(false);
     }
 
     // Load employee management
