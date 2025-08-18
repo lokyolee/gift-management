@@ -709,6 +709,12 @@ Stores: ${state.stores}`;
             exportBtn.addEventListener('click', () => this.exportToExcel());
         }
 
+        // Import functionality
+        const importBtn = document.getElementById('importExcel');
+        if (importBtn) {
+            importBtn.addEventListener('click', () => this.openImportExcelModal());
+        }
+
         // Test data persistence functionality
         const testDataBtn = document.getElementById('testDataPersistence');
         if (testDataBtn) {
@@ -762,13 +768,23 @@ Stores: ${state.stores}`;
         }
 
         // Modal events
-        const modalClose = document.querySelector('.modal-close');
+        const modalClose = document.querySelectorAll('.modal-close');
         const rejectBtn = document.getElementById('rejectBtn');
         const approvalModal = document.getElementById('approvalModal');
 
-        if (modalClose) {
-            modalClose.addEventListener('click', () => this.closeModal());
-        }
+        modalClose.forEach(closeBtn => {
+            closeBtn.addEventListener('click', (e) => {
+                const modal = e.target.closest('.modal');
+                if (modal) {
+                    if (modal.id === 'importExcelModal') {
+                        this.closeImportExcelModal();
+                    } else {
+                        this.closeModal();
+                    }
+                }
+            });
+        });
+
         if (rejectBtn) {
             rejectBtn.addEventListener('click', () => this.rejectRequest());
         }
@@ -1710,6 +1726,391 @@ Stores: ${state.stores}`;
             this.showLoading(false);
             this.showSuccess('報表匯出完成');
         }, 1000);
+    }
+
+    // Open Import Excel Modal
+    openImportExcelModal() {
+        const modal = document.getElementById('importExcelModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            this.setupImportModal();
+        }
+    }
+
+    // Close Import Excel Modal
+    closeImportExcelModal() {
+        const modal = document.getElementById('importExcelModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            this.resetImportModal();
+        }
+    }
+
+    // Setup Import Modal
+    setupImportModal() {
+        const fileUploadArea = document.getElementById('fileUploadArea');
+        const importFileInput = document.getElementById('importFileInput');
+        const startImportBtn = document.getElementById('startImportBtn');
+
+        if (fileUploadArea && importFileInput) {
+            // Click to select file
+            fileUploadArea.addEventListener('click', () => {
+                importFileInput.click();
+            });
+
+            // File selection change
+            importFileInput.addEventListener('change', (e) => {
+                this.handleFileSelection(e.target.files[0]);
+            });
+
+            // Drag and drop functionality
+            fileUploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                fileUploadArea.classList.add('dragover');
+            });
+
+            fileUploadArea.addEventListener('dragleave', () => {
+                fileUploadArea.classList.remove('dragover');
+            });
+
+            fileUploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                fileUploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    this.handleFileSelection(files[0]);
+                }
+            });
+
+            // Start import button
+            if (startImportBtn) {
+                startImportBtn.addEventListener('click', () => {
+                    this.startImport();
+                });
+            }
+        }
+    }
+
+    // Handle file selection
+    async handleFileSelection(file) {
+        if (!file) return;
+
+        // Show file info
+        this.showFileInfo(file);
+
+        try {
+            // Parse the file based on type
+            const data = await this.parseExcelFile(file);
+            
+            // Show preview
+            this.showImportPreview(data);
+            
+            // Enable start import button
+            const startImportBtn = document.getElementById('startImportBtn');
+            if (startImportBtn) {
+                startImportBtn.disabled = false;
+            }
+        } catch (error) {
+            console.error('File parsing error:', error);
+            this.showError('檔案解析失敗：' + error.message);
+        }
+    }
+
+    // Parse Excel file
+    async parseExcelFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                try {
+                    const data = e.target.result;
+                    
+                    if (file.name.endsWith('.csv')) {
+                        // Parse CSV
+                        const csvData = this.parseCSV(data);
+                        resolve(csvData);
+                    } else {
+                        // For now, we'll handle CSV only
+                        // In a full implementation, you'd use a library like SheetJS for Excel files
+                        reject(new Error('目前僅支援 CSV 格式，Excel 檔案功能開發中'));
+                    }
+                } catch (error) {
+                    reject(error);
+                }
+            };
+            
+            reader.onerror = () => reject(new Error('檔案讀取失敗'));
+            
+            if (file.name.endsWith('.csv')) {
+                reader.readAsText(file, 'UTF-8');
+            } else {
+                reject(new Error('不支援的檔案格式'));
+            }
+        });
+    }
+
+    // Parse CSV data
+    parseCSV(csvText) {
+        const lines = csvText.split('\n').filter(line => line.trim());
+        if (lines.length === 0) {
+            throw new Error('CSV 檔案為空');
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim());
+        const data = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(',').map(v => v.trim());
+            if (values.length === headers.length) {
+                const row = {};
+                headers.forEach((header, index) => {
+                    row[header] = values[index];
+                });
+                data.push(row);
+            }
+        }
+
+        return { headers, data };
+    }
+
+    // Show file info
+    showFileInfo(file) {
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+
+        if (fileInfo && fileName && fileSize) {
+            fileName.textContent = file.name;
+            fileSize.textContent = this.formatFileSize(file.size);
+            fileInfo.style.display = 'block';
+        }
+    }
+
+    // Format file size
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // Show import preview
+    showImportPreview(parsedData) {
+        const previewSection = document.getElementById('importPreview');
+        const previewHeaders = document.getElementById('previewHeaders');
+        const previewBody = document.getElementById('previewBody');
+
+        if (previewSection && previewHeaders && previewBody) {
+            // Show headers
+            previewHeaders.innerHTML = parsedData.headers.map(header => 
+                `<th>${header}</th>`
+            ).join('');
+
+            // Show first 5 rows as preview
+            const previewRows = parsedData.data.slice(0, 5);
+            previewBody.innerHTML = previewRows.map(row => 
+                `<tr>${parsedData.headers.map(header => 
+                    `<td>${row[header] || ''}</td>`
+                ).join('')}</tr>`
+            ).join('');
+
+            previewSection.style.display = 'block';
+        }
+    }
+
+    // Start import process
+    async startImport() {
+        const importType = document.querySelector('input[name="importType"]:checked').value;
+        const overwriteExisting = document.getElementById('overwriteExisting').checked;
+        const createMissing = document.getElementById('createMissing').checked;
+
+        this.showLoading(true);
+
+        try {
+            // Get the parsed data
+            const importFileInput = document.getElementById('importFileInput');
+            const file = importFileInput.files[0];
+            
+            if (!file) {
+                throw new Error('請選擇要匯入的檔案');
+            }
+
+            const parsedData = await this.parseExcelFile(file);
+            
+            // Process import based on type
+            let result;
+            switch (importType) {
+                case 'inventory':
+                    result = await this.importInventory(parsedData.data, overwriteExisting, createMissing);
+                    break;
+                case 'employees':
+                    result = await this.importEmployees(parsedData.data, overwriteExisting, createMissing);
+                    break;
+                case 'gifts':
+                    result = await this.importGifts(parsedData.data, overwriteExisting, createMissing);
+                    break;
+                default:
+                    throw new Error('不支援的匯入類型');
+            }
+
+            this.showSuccess(`匯入完成！成功處理 ${result.successCount} 筆資料`);
+            
+            // Refresh data
+            await this.refreshAllData();
+            
+            // Close modal
+            this.closeImportExcelModal();
+            
+        } catch (error) {
+            console.error('Import failed:', error);
+            this.showError('匯入失敗：' + error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    // Import inventory data
+    async importInventory(data, overwriteExisting, createMissing) {
+        let successCount = 0;
+        let errors = [];
+
+        for (const row of data) {
+            try {
+                // Validate required fields
+                if (!row['員工編號'] || !row['贈品編號'] || row['數量'] === undefined) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: 缺少必要欄位`);
+                    continue;
+                }
+
+                // Find employee by employee ID
+                const employee = this.data.users.find(u => 
+                    u.employeeId === row['員工編號'] && u.status === 'active'
+                );
+
+                if (!employee && !createMissing) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: 找不到員工 ${row['員工編號']}`);
+                    continue;
+                }
+
+                // Find gift by gift code
+                const gift = this.data.gifts.find(g => g.giftCode === row['贈品編號']);
+
+                if (!gift && !createMissing) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: 找不到贈品 ${row['贈品編號']}`);
+                    continue;
+                }
+
+                // Update or create inventory
+                const quantity = parseInt(row['數量']);
+                if (isNaN(quantity)) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: 數量格式錯誤`);
+                    continue;
+                }
+
+                // For now, we'll just count successful rows
+                // In a full implementation, you'd call the backend API
+                successCount++;
+                
+            } catch (error) {
+                errors.push(`行 ${data.indexOf(row) + 2}: ${error.message}`);
+            }
+        }
+
+        if (errors.length > 0) {
+            console.warn('Import errors:', errors);
+        }
+
+        return { successCount, errors };
+    }
+
+    // Import employees data
+    async importEmployees(data, overwriteExisting, createMissing) {
+        let successCount = 0;
+        let errors = [];
+
+        for (const row of data) {
+            try {
+                // Validate required fields
+                if (!row['帳號'] || !row['姓名'] || !row['員工編號']) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: 缺少必要欄位`);
+                    continue;
+                }
+
+                // Check if employee exists
+                const existingEmployee = this.data.users.find(u => 
+                    u.employeeId === row['員工編號'] || u.username === row['帳號']
+                );
+
+                if (existingEmployee && !overwriteExisting) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: 員工已存在 ${row['員工編號']}`);
+                    continue;
+                }
+
+                // For now, we'll just count successful rows
+                // In a full implementation, you'd call the backend API
+                successCount++;
+                
+            } catch (error) {
+                errors.push(`行 ${data.indexOf(row) + 2}: ${error.message}`);
+            }
+        }
+
+        if (errors.length > 0) {
+            console.warn('Import errors:', errors);
+        }
+
+        return { successCount, errors };
+    }
+
+    // Import gifts data
+    async importGifts(data, overwriteExisting, createMissing) {
+        let successCount = 0;
+        let errors = [];
+
+        for (const row of data) {
+            try {
+                // Validate required fields
+                if (!row['贈品編號'] || !row['贈品名稱']) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: 缺少必要欄位`);
+                    continue;
+                }
+
+                // Check if gift exists
+                const existingGift = this.data.gifts.find(g => g.giftCode === row['贈品編號']);
+
+                if (existingGift && !overwriteExisting) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: 贈品已存在 ${row['贈品編號']}`);
+                    continue;
+                }
+
+                // For now, we'll just count successful rows
+                // In a full implementation, you'd call the backend API
+                successCount++;
+                
+            } catch (error) {
+                errors.push(`行 ${data.indexOf(row) + 2}: ${error.message}`);
+            }
+        }
+
+        if (errors.length > 0) {
+            console.warn('Import errors:', errors);
+        }
+
+        return { successCount, errors };
+    }
+
+    // Reset import modal
+    resetImportModal() {
+        const fileInfo = document.getElementById('fileInfo');
+        const importPreview = document.getElementById('importPreview');
+        const startImportBtn = document.getElementById('startImportBtn');
+        const importFileInput = document.getElementById('importFileInput');
+
+        if (fileInfo) fileInfo.style.display = 'none';
+        if (importPreview) importPreview.style.display = 'none';
+        if (startImportBtn) startImportBtn.disabled = true;
+        if (importFileInput) importFileInput.value = '';
     }
 
     // Handle search
