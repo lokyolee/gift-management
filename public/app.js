@@ -769,6 +769,12 @@ Stores: ${state.stores}`;
             testGiftAPIBtn.addEventListener('click', () => this.testGiftAPI());
         }
 
+        // Test API routing functionality
+        const testAPIRoutingBtn = document.getElementById('testAPIRouting');
+        if (testAPIRoutingBtn) {
+            testAPIRoutingBtn.addEventListener('click', () => this.testAPIRouting());
+        }
+
         // Employee management functionality
         const addEmployeeBtn = document.getElementById('addEmployee');
         if (addEmployeeBtn) {
@@ -2470,6 +2476,31 @@ Stores: ${state.stores}`;
         } catch (error) {
             console.error('Test gift API failed:', error);
             this.showError('贈品API測試失敗：' + error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    // Test API routing
+    async testAPIRouting() {
+        try {
+            this.showLoading(true);
+            console.log('Testing API routing...');
+            
+            // Test the simple test endpoint
+            const response = await this.apiCall('/api/test');
+            
+            console.log('API routing test response:', response);
+            
+            if (response.success) {
+                this.showSuccess(`API路由測試成功！\nBase Path: ${response.basePath}\n時間: ${response.timestamp}`);
+            } else {
+                this.showError('API路由測試失敗：' + response.message);
+            }
+            
+        } catch (error) {
+            console.error('API routing test failed:', error);
+            this.showError('API路由測試失敗：' + error.message);
         } finally {
             this.showLoading(false);
         }
