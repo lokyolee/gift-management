@@ -163,7 +163,10 @@ class GiftManagementApp {
 
     async refreshInventoryData() {
         try {
+            console.log('Refreshing inventory data...');
             const response = await this.apiCall('/api/inventory/all');
+            console.log('Inventory response:', response);
+            
             if (response && Array.isArray(response)) {
                 this.data.giftInventory = response.map(inv => ({
                     userId: inv.userId,
@@ -171,10 +174,14 @@ class GiftManagementApp {
                     quantity: inv.quantity,
                     lastUpdated: inv.lastUpdated
                 }));
+                console.log(`Loaded ${this.data.giftInventory.length} inventory records`);
+            } else {
+                console.warn('Unexpected inventory data format:', response);
             }
             console.log('Inventory data refreshed successfully');
         } catch (error) {
             console.error('Failed to refresh inventory data:', error);
+            // Don't clear existing inventory data on error
         }
     }
 
@@ -229,6 +236,9 @@ class GiftManagementApp {
         try {
             console.log('Starting comprehensive data refresh...');
             
+            // Store current user info before refresh
+            const currentUserBackup = this.currentUser ? { ...this.currentUser } : null;
+            
             // Refresh all data sources
             await Promise.all([
                 this.refreshUserData(),
@@ -238,6 +248,12 @@ class GiftManagementApp {
             
             // Clean up any invalid references
             this.cleanupInvalidReferences();
+            
+            // Restore current user if it was lost
+            if (currentUserBackup && (!this.currentUser || !this.currentUser.fullName)) {
+                console.log('Restoring current user after data refresh');
+                this.currentUser = currentUserBackup;
+            }
             
             // Save current data state for debugging
             this.saveDataSnapshot();
@@ -370,7 +386,7 @@ Stores: ${state.stores}`;
                 await this.loadEmployeeManagement();
                 await this.loadManagerOptions();
             } else {
-                this.loadInventory();
+                await this.loadInventory();
                 this.loadGiftOptions();
                 this.loadEmployeeOptions();
             }
@@ -510,6 +526,35 @@ Stores: ${state.stores}`;
         return true;
     }
 
+    // Validate and restore user session if needed
+    async validateUserSession() {
+        console.log('Validating user session...');
+        
+        // Check if current user is valid
+        if (!this.checkCurrentUserState()) {
+            return false;
+        }
+        
+        // Check if we have the necessary data
+        if (!this.data.users || this.data.users.length === 0) {
+            console.log('User data missing, refreshing...');
+            await this.refreshUserData();
+        }
+        
+        if (!this.data.giftInventory || this.data.giftInventory.length === 0) {
+            console.log('Inventory data missing, refreshing...');
+            await this.refreshInventoryData();
+        }
+        
+        if (!this.data.gifts || this.data.gifts.length === 0) {
+            console.log('Gift data missing, refreshing...');
+            await this.loadGiftsData();
+        }
+        
+        console.log('User session validation completed');
+        return true;
+    }
+
     // Bind all event listeners
     bindEvents() {
         // Login events - make sure elements exist before binding
@@ -568,7 +613,7 @@ Stores: ${state.stores}`;
 
         // Refresh buttons
         const refreshButtons = {
-            'refreshInventory': () => this.loadInventory(),
+            'refreshInventory': async () => await this.loadInventory(),
             'refreshHistory': () => this.loadHistory(),
             'refreshDashboard': () => this.loadDashboard(),
             'refreshApprovals': () => this.loadApprovals()
@@ -621,6 +666,12 @@ Stores: ${state.stores}`;
         const checkUserStateBtn = document.getElementById('checkUserState');
         if (checkUserStateBtn) {
             checkUserStateBtn.addEventListener('click', () => this.checkCurrentUserState());
+        }
+
+        // Validate session functionality
+        const validateSessionBtn = document.getElementById('validateSession');
+        if (validateSessionBtn) {
+            validateSessionBtn.addEventListener('click', () => this.validateUserSession());
         }
 
         // Employee management functionality
@@ -745,7 +796,7 @@ Stores: ${state.stores}`;
                 if (welcomeEl) {
                     welcomeEl.textContent = `歡迎，${this.currentUser.fullName}`;
                 }
-                this.loadInventory();
+                await this.loadInventory();
                 this.loadGiftOptions();
                 this.loadEmployeeOptions();
                 this.switchView('inventory');
@@ -808,11 +859,34 @@ Stores: ${state.stores}`;
     }
 
     // Load employee inventory
-    loadInventory() {
+    async loadInventory() {
         const container = document.getElementById('inventoryList');
-        if (!container || !this.currentUser) return;
+        if (!container) {
+            console.warn('Inventory container not found');
+            return;
+        }
+        
+        // Validate user session before loading inventory
+        if (!this.currentUser || !this.currentUser.id) {
+            console.warn('Current user not available for inventory loading, attempting validation...');
+            const sessionValid = await this.validateUserSession();
+            if (!sessionValid) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚠️</div>
+                        <div class="empty-state-text">用戶狀態異常</div>
+                        <div class="empty-state-subtext">請重新登入或聯繫管理員</div>
+                    </div>
+                `;
+                return;
+            }
+        }
 
+        console.log('Loading inventory for user:', this.currentUser.fullName, 'ID:', this.currentUser.id);
+        console.log('Available inventory data:', this.data.giftInventory.length, 'records');
+        
         const userInventory = this.data.giftInventory.filter(inv => inv.userId === this.currentUser.id);
+        console.log('User inventory found:', userInventory.length, 'records');
         
         if (userInventory.length === 0) {
             container.innerHTML = `
@@ -827,7 +901,10 @@ Stores: ${state.stores}`;
 
         container.innerHTML = userInventory.map(inv => {
             const gift = this.data.gifts.find(g => g.id === inv.giftId);
-            if (!gift) return '';
+            if (!gift) {
+                console.warn('Gift not found for inventory item:', inv);
+                return '';
+            }
             
             return `
                 <div class="inventory-item">
@@ -1028,6 +1105,9 @@ Stores: ${state.stores}`;
         this.showLoading(true);
         
         try {
+            // Store current user info before API call
+            const currentUserBackup = { ...this.currentUser };
+            
             // Send distribution to backend
             const response = await this.apiCall('/api/inventory/send', {
                 method: 'POST',
@@ -1039,8 +1119,11 @@ Stores: ${state.stores}`;
             });
             
             if (response.success) {
-                // Update local data after successful backend update
-                await this.refreshAllData();
+                // Refresh only inventory data, not all data
+                await this.refreshInventoryData();
+                
+                // Ensure current user is preserved
+                this.currentUser = currentUserBackup;
                 
                 this.showSuccess(`已登記送出 ${quantity} 個贈品`);
                 this.resetForm('distributionForm');
@@ -1724,7 +1807,7 @@ Stores: ${state.stores}`;
         
         // Load data for the view
         if (viewName === 'inventory') {
-            this.loadInventory();
+            await this.loadInventory();
         } else if (viewName === 'history') {
             this.loadHistory();
         } else if (viewName === 'dashboard') {
