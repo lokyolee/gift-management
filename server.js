@@ -1094,6 +1094,114 @@ app.get(`${BASE_PATH}/api/gifts`, authenticateToken, async (req, res) => {
     }
 });
 
+// 新增贈品
+app.post(`${BASE_PATH}/api/gifts`, authenticateToken, requireRole(['manager']), async (req, res) => {
+    try {
+        console.log('Gift creation request received:', req.body);
+        console.log('User:', req.user);
+        
+        const { giftCode, giftName, category, status = 'active' } = req.body;
+        
+        if (!giftCode || !giftName || !category) {
+            console.log('Missing required fields:', { giftCode, giftName, category });
+            return res.status(400).json({ 
+                success: false, 
+                message: '請填寫所有必要欄位' 
+            });
+        }
+        
+        const data = await readData();
+        console.log('Current data loaded, nextIds:', data.nextIds);
+        
+        // 檢查贈品編號是否已存在
+        const existingGift = data.gifts.find(g => g.giftCode === giftCode);
+        if (existingGift) {
+            console.log('Gift code already exists:', giftCode);
+            return res.status(400).json({ 
+                success: false, 
+                message: '贈品編號已存在' 
+            });
+        }
+        
+        // 建立新贈品
+        const newGift = {
+            id: data.nextIds.gifts++,
+            giftCode,
+            giftName,
+            category,
+            status,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        
+        console.log('Creating new gift:', newGift);
+        
+        data.gifts.push(newGift);
+        await writeData(data);
+        
+        console.log('Gift created successfully, new nextIds.gifts:', data.nextIds.gifts);
+        
+        res.json({ 
+            success: true, 
+            gift: newGift,
+            message: '贈品新增成功' 
+        });
+        
+    } catch (error) {
+        console.error('Add gift error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
+// 更新贈品
+app.put(`${BASE_PATH}/api/gifts/:id`, authenticateToken, requireRole(['manager']), async (req, res) => {
+    try {
+        const giftId = parseInt(req.params.id);
+        const { giftCode, giftName, category, status } = req.body;
+        
+        const data = await readData();
+        const giftIndex = data.gifts.findIndex(g => g.id === giftId);
+        
+        if (giftIndex === -1) {
+            return res.status(404).json({ 
+                success: false, 
+                message: '找不到贈品' 
+            });
+        }
+        
+        // 檢查贈品編號是否已被其他贈品使用
+        if (giftCode && giftCode !== data.gifts[giftIndex].giftCode) {
+            const existingGift = data.gifts.find(g => g.giftCode === giftCode && g.id !== giftId);
+            if (existingGift) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: '贈品編號已存在' 
+                });
+            }
+        }
+        
+        // 更新贈品資料
+        if (giftCode) data.gifts[giftIndex].giftCode = giftCode;
+        if (giftName) data.gifts[giftIndex].giftName = giftName;
+        if (category) data.gifts[giftIndex].category = category;
+        if (status !== undefined) data.gifts[giftIndex].status = status;
+        
+        data.gifts[giftIndex].updatedAt = new Date().toISOString();
+        
+        await writeData(data);
+        
+        res.json({ 
+            success: true, 
+            gift: data.gifts[giftIndex],
+            message: '贈品更新成功' 
+        });
+        
+    } catch (error) {
+        console.error('Update gift error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
 // 取得所有門店
 app.get(`${BASE_PATH}/api/stores`, authenticateToken, async (req, res) => {
     try {
@@ -1104,6 +1212,16 @@ app.get(`${BASE_PATH}/api/stores`, authenticateToken, async (req, res) => {
         console.error('Get stores error:', error);
         res.status(500).json({ success: false, message: '伺服器錯誤' });
     }
+});
+
+// Test endpoint to verify API routing
+app.get(`${BASE_PATH}/api/test`, (req, res) => {
+    res.json({ 
+        success: true, 
+        message: 'API test endpoint working',
+        basePath: BASE_PATH,
+        timestamp: new Date().toISOString()
+    });
 });
 
 // =============================================================================
