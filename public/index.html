@@ -528,6 +528,74 @@
         </div>
     </div>
 
+    <!-- Export Excel Modal -->
+    <div id="exportExcelModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>匯出Excel</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="export-section">
+                    <h4>選擇匯出類型</h4>
+                    <div class="export-options">
+                        <label class="export-option">
+                            <input type="radio" name="exportType" value="inventory" checked>
+                            <span>庫存報表</span>
+                            <small>包含所有員工的贈品庫存狀況</small>
+                        </label>
+                        <label class="export-option">
+                            <input type="radio" name="exportType" value="employees">
+                            <span>員工資料</span>
+                            <small>包含所有員工的基本資料和狀態</small>
+                        </label>
+                        <label class="export-option">
+                            <input type="radio" name="exportType" value="gifts">
+                            <span>贈品資料</span>
+                            <small>包含所有贈品的基本資料和分類</small>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="export-section">
+                    <h4>匯出選項</h4>
+                    <div class="export-options">
+                        <label class="export-option">
+                            <input type="checkbox" id="includeInactive" checked>
+                            <span>包含停用資料</span>
+                            <small>匯出停用的員工和贈品</small>
+                        </label>
+                        <label class="export-option">
+                            <input type="checkbox" id="includeTimestamps" checked>
+                            <span>包含時間戳記</span>
+                            <small>匯出建立和更新時間</small>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="export-section">
+                    <h4>檔案格式</h4>
+                    <div class="export-options">
+                        <label class="export-option">
+                            <input type="radio" name="exportFormat" value="csv" checked>
+                            <span>CSV 格式</span>
+                            <small>可用 Excel 開啟的逗號分隔檔案</small>
+                        </label>
+                        <label class="export-option">
+                            <input type="radio" name="exportFormat" value="excel" disabled>
+                            <span>Excel 格式</span>
+                            <small>原生 Excel 檔案 (開發中)</small>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn--primary" id="startExportBtn">開始匯出</button>
+                <button type="button" class="btn btn--secondary" onclick="app.closeExportExcelModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
