@@ -421,7 +421,7 @@ Stores: ${state.stores}`;
             } else {
                 await this.loadInventory();
                 this.loadGiftOptions();
-                this.loadEmployeeOptions();
+                await this.loadEmployeeOptions();
             }
             
             this.showSuccess('資料已強制重新整理');
@@ -775,6 +775,18 @@ Stores: ${state.stores}`;
             testAPIRoutingBtn.addEventListener('click', () => this.testAPIRouting());
         }
 
+        // Test colleagues API functionality
+        const testColleaguesAPIBtn = document.getElementById('testColleaguesAPI');
+        if (testColleaguesAPIBtn) {
+            testColleaguesAPIBtn.addEventListener('click', () => this.testColleaguesAPI());
+        }
+
+        // Debug transfer form functionality
+        const debugTransferFormBtn = document.getElementById('debugTransferForm');
+        if (debugTransferFormBtn) {
+            debugTransferFormBtn.addEventListener('click', () => this.debugTransferForm());
+        }
+
         // Refresh employee options functionality
         const refreshEmployeeOptionsBtn = document.getElementById('refreshEmployeeOptions');
         if (refreshEmployeeOptionsBtn) {
@@ -784,11 +796,26 @@ Stores: ${state.stores}`;
         // Tab click events for refreshing data
         const tabBtns = document.querySelectorAll('.tab-btn');
         tabBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', async (e) => {
                 const tabName = e.target.dataset.tab;
+                console.log('Tab clicked:', tabName);
+                
                 if (tabName === 'transfer') {
                     console.log('Transfer tab clicked, refreshing employee options...');
-                    this.loadEmployeeOptions();
+                    console.log('Current user state:', {
+                        id: this.currentUser?.id,
+                        fullName: this.currentUser?.fullName,
+                        role: this.currentUser?.role
+                    });
+                    
+                    // Ensure we have the latest data before loading options
+                    try {
+                        await this.refreshUserData();
+                        await this.loadEmployeeOptions();
+                        console.log('Employee options refreshed successfully');
+                    } catch (error) {
+                        console.error('Failed to refresh employee options:', error);
+                    }
                 }
             });
         });
@@ -930,8 +957,15 @@ Stores: ${state.stores}`;
                 
                 await this.loadInventory();
                 this.loadGiftOptions();
-                this.loadEmployeeOptions();
+                // Load employee options after data is loaded
+                await this.loadEmployeeOptions();
                 this.switchView('inventory');
+                
+                // Debug: Check transfer form state after initialization
+                console.log('=== Post-initialization Transfer Form Check ===');
+                setTimeout(() => {
+                    this.debugTransferForm();
+                }, 1000);
             } else {
                 const welcomeEl = document.getElementById('managerWelcome');
                 if (welcomeEl) {
@@ -1074,46 +1108,133 @@ Stores: ${state.stores}`;
     }
 
     // Load employee options for transfers
-    loadEmployeeOptions() {
+    async loadEmployeeOptions() {
+        // Wait a bit to ensure DOM is ready
+        await this.delay(100);
+        
         const select = document.getElementById('transferTarget');
-        if (select && this.currentUser) {
-            console.log('Loading employee options for user:', this.currentUser.fullName, 'Role:', this.currentUser.role);
-            console.log('Available users:', this.data.users.length);
+        console.log('Loading employee options - select element:', select);
+        console.log('Current user:', this.currentUser);
+        
+        if (!select) {
+            console.error('Transfer target select element not found');
+            console.log('Available elements with similar names:');
+            document.querySelectorAll('select').forEach(s => {
+                if (s.id && s.id.includes('transfer')) {
+                    console.log('Found similar select:', s.id, s);
+                }
+            });
+            return;
+        }
+        
+        if (!this.currentUser) {
+            console.error('Current user not available');
+            return;
+        }
+        
+        console.log('Loading employee options for user:', this.currentUser.fullName, 'Role:', this.currentUser.role);
+        console.log('Select element before loading:', {
+            id: select.id,
+            innerHTML: select.innerHTML.substring(0, 100) + '...',
+            optionsCount: select.options.length
+        });
+        
+        try {
+            // Use the new colleagues endpoint instead of relying on cached user data
+            const response = await this.apiCall('/api/colleagues');
+            console.log('Colleagues API response:', response);
             
-            let colleagues;
-            
-            if (this.currentUser.role === 'employee') {
-                // Employees can transfer to other employees and managers
-                colleagues = this.data.users.filter(u => 
-                    u.id !== this.currentUser.id && 
-                    u.status === 'active'
-                );
-            } else if (this.currentUser.role === 'manager') {
-                // Managers can transfer to employees
-                colleagues = this.data.users.filter(u => 
-                    u.id !== this.currentUser.id && 
-                    u.role === 'employee' && 
-                    u.status === 'active'
-                );
+            if (response && Array.isArray(response)) {
+                const colleagues = response;
+                console.log('Available colleagues:', colleagues.length);
+                console.log('Colleagues:', colleagues.map(u => `${u.fullName} (${u.role})`));
+                
+                if (colleagues.length === 0) {
+                    select.innerHTML = '<option value="">暫無可選擇的同事</option>';
+                    console.warn('No colleagues available for transfer');
+                } else {
+                    const optionsHTML = '<option value="">請選擇同事</option>' +
+                        colleagues.map(user => 
+                            `<option value="${user.id}">${user.fullName} (${user.employeeId}) - ${user.role === 'manager' ? '主管' : '員工'}</option>`
+                        ).join('');
+                    
+                    select.innerHTML = optionsHTML;
+                    console.log('Employee options loaded successfully');
+                    console.log('Options HTML length:', optionsHTML.length);
+                    console.log('Select element after loading:', {
+                        innerHTML: select.innerHTML.substring(0, 100) + '...',
+                        optionsCount: select.options.length
+                    });
+                }
             } else {
-                colleagues = [];
+                console.warn('Unexpected colleagues response format:', response);
+                select.innerHTML = '<option value="">載入同事資料失敗</option>';
+                
+                // Fallback: try to use cached user data if available
+                if (this.data.users && this.data.users.length > 0) {
+                    console.log('Attempting fallback to cached user data...');
+                    this.loadEmployeeOptionsFromCache();
+                }
             }
+        } catch (error) {
+            console.error('Failed to load colleagues:', error);
+            select.innerHTML = '<option value="">載入同事資料失敗</option>';
             
-            console.log('Filtered colleagues:', colleagues.length);
-            console.log('Colleagues:', colleagues.map(u => `${u.fullName} (${u.role})`));
-            
-            if (colleagues.length === 0) {
-                select.innerHTML = '<option value="">暫無可選擇的同事</option>';
-                console.warn('No colleagues available for transfer');
-            } else {
-                select.innerHTML = '<option value="">請選擇同事</option>' +
-                    colleagues.map(user => 
-                        `<option value="${user.id}">${user.fullName} (${user.employeeId}) - ${user.role === 'manager' ? '主管' : '員工'}</option>`
-                    ).join('');
-                console.log('Employee options loaded successfully');
+            // Fallback: try to use cached user data if available
+            if (this.data.users && this.data.users.length > 0) {
+                console.log('Attempting fallback to cached user data...');
+                this.loadEmployeeOptionsFromCache();
             }
+        }
+    }
+
+    // Fallback method to load employee options from cached data
+    loadEmployeeOptionsFromCache() {
+        const select = document.getElementById('transferTarget');
+        if (!select || !this.currentUser) return;
+        
+        console.log('Loading employee options from cached data...');
+        console.log('Available cached users:', this.data.users.length);
+        console.log('Cached users:', this.data.users.map(u => ({ id: u.id, fullName: u.fullName, role: u.role, status: u.status })));
+        
+        let colleagues;
+        
+        if (this.currentUser.role === 'employee') {
+            // Employees can transfer to other employees and managers
+            colleagues = this.data.users.filter(u => 
+                u.id !== this.currentUser.id && 
+                u.status === 'active'
+            );
+        } else if (this.currentUser.role === 'manager') {
+            // Managers can transfer to employees
+            colleagues = this.data.users.filter(u => 
+                u.id !== this.currentUser.id && 
+                u.role === 'employee' && 
+                u.status === 'active'
+            );
         } else {
-            console.warn('Cannot load employee options: select element or current user not available');
+            colleagues = [];
+        }
+        
+        console.log('Filtered colleagues from cache:', colleagues.length);
+        console.log('Filtered colleagues:', colleagues.map(u => ({ id: u.id, fullName: u.fullName, role: u.role, status: u.status })));
+        
+        if (colleagues.length > 0) {
+            const optionsHTML = '<option value="">請選擇同事</option>' +
+                colleagues.map(user => 
+                    `<option value="${user.id}">${user.fullName} (${user.employeeId}) - ${user.role === 'manager' ? '主管' : '員工'}</option>`
+                ).join('');
+            
+            select.innerHTML = optionsHTML;
+            console.log('Employee options loaded from cache successfully');
+            console.log('Options HTML length:', optionsHTML.length);
+            console.log('Select element after cache loading:', {
+                innerHTML: select.innerHTML.substring(0, 100) + '...',
+                optionsCount: select.options.length
+            });
+        } else {
+            select.innerHTML = '<option value="">暫無可選擇的同事</option>';
+            console.warn('No colleagues available from cache');
         }
     }
 
@@ -2552,6 +2673,86 @@ Stores: ${state.stores}`;
         }
     }
 
+    // Test colleagues API
+    async testColleaguesAPI() {
+        try {
+            this.showLoading(true);
+            console.log('Testing colleagues API...');
+            
+            const response = await this.apiCall('/api/colleagues');
+            console.log('Colleagues API response:', response);
+            
+            if (response && Array.isArray(response)) {
+                this.showSuccess(`同事API測試成功！\n找到 ${response.length} 位同事\n${response.map(u => `${u.fullName} (${u.role})`).join('\n')}`);
+            } else {
+                this.showError('同事API測試失敗：回應格式錯誤');
+            }
+            
+        } catch (error) {
+            console.error('Test colleagues API failed:', error);
+            this.showError('同事API測試失敗：' + error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    // Debug transfer form state
+    debugTransferForm() {
+        console.log('=== Debug Transfer Form ===');
+        
+        const select = document.getElementById('transferTarget');
+        if (select) {
+            console.log('Transfer target select element:', select);
+            console.log('Select innerHTML length:', select.innerHTML.length);
+            console.log('Select options count:', select.options.length);
+            console.log('Select value:', select.value);
+            
+            // Show all options
+            for (let i = 0; i < select.options.length; i++) {
+                const option = select.options[i];
+                console.log(`Option ${i}:`, {
+                    value: option.value,
+                    text: option.text,
+                    selected: option.selected
+                });
+            }
+        } else {
+            console.log('Transfer target select element not found');
+            
+            // Check if we're on the right screen
+            const currentScreen = document.querySelector('.screen.active');
+            console.log('Current active screen:', currentScreen?.id);
+            
+            // Check if we're on the right view
+            const currentView = document.querySelector('.view.active');
+            console.log('Current active view:', currentView?.id);
+            
+            // Check if the transfer tab is visible
+            const transferTab = document.getElementById('transferTab');
+            console.log('Transfer tab element:', transferTab);
+            
+            // Check all select elements
+            console.log('All select elements:');
+            document.querySelectorAll('select').forEach(s => {
+                console.log('Select:', s.id, s);
+            });
+        }
+        
+        console.log('Current user:', this.currentUser);
+        console.log('Available users in data:', this.data.users.length);
+        console.log('Available gifts in data:', this.data.gifts.length);
+        
+        // Check if we can access the colleagues API
+        console.log('Testing colleagues API access...');
+        this.testColleaguesAPI().then(() => {
+            console.log('Colleagues API test completed');
+        }).catch(error => {
+            console.error('Colleagues API test failed:', error);
+        });
+        
+        console.log('=== End Debug ===');
+    }
+
     // Refresh employee options
     async refreshEmployeeOptions() {
         try {
@@ -2562,7 +2763,7 @@ Stores: ${state.stores}`;
             await this.refreshUserData();
             
             // Then load employee options
-            this.loadEmployeeOptions();
+            await this.loadEmployeeOptions();
             
             this.showSuccess('同事選項已重新整理');
             
