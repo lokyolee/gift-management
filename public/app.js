@@ -274,7 +274,9 @@ class GiftManagementApp {
             await Promise.all([
                 this.refreshUserData(),
                 this.refreshInventoryData(),
-                this.refreshRequestData()
+                this.refreshRequestData(),
+                this.loadGiftsData(), // Add gifts data refresh
+                this.loadStoresData() // Add stores data refresh
             ]);
             
             // Clean up any invalid references
@@ -2151,7 +2153,18 @@ Stores: ${state.stores}`;
                     throw new Error('不支援的匯入類型');
             }
 
-            this.showSuccess(`匯入完成！成功處理 ${result.successCount} 筆資料`);
+            // Show detailed results
+            if (result.errors && result.errors.length > 0) {
+                this.showError(`匯入完成，但有 ${result.errors.length} 個錯誤。成功處理 ${result.successCount} 筆資料。`);
+                console.warn('Import errors:', result.errors);
+                
+                // Show errors in a more user-friendly way
+                const errorMessage = result.errors.slice(0, 5).join('\n') + 
+                    (result.errors.length > 5 ? `\n... 還有 ${result.errors.length - 5} 個錯誤` : '');
+                this.showToast(errorMessage, 'warning');
+            } else {
+                this.showSuccess(`匯入完成！成功處理 ${result.successCount} 筆資料`);
+            }
             
             // Refresh data
             await this.refreshAllData();
@@ -2205,9 +2218,25 @@ Stores: ${state.stores}`;
                     continue;
                 }
 
-                // For now, we'll just count successful rows
-                // In a full implementation, you'd call the backend API
-                successCount++;
+                // Call backend API to update inventory
+                try {
+                    const response = await this.apiCall(`/api/inventory/${employee.id}/${gift.id}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            quantity: quantity,
+                            reason: `匯入更新 - ${new Date().toLocaleString('zh-TW')}`
+                        })
+                    });
+
+                    if (response.success) {
+                        successCount++;
+                        console.log(`Successfully updated inventory for ${employee.fullName} - ${gift.giftName}: ${quantity}`);
+                    } else {
+                        errors.push(`行 ${data.indexOf(row) + 2}: 更新庫存失敗 - ${response.message}`);
+                    }
+                } catch (apiError) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: API 錯誤 - ${apiError.message}`);
+                }
                 
             } catch (error) {
                 errors.push(`行 ${data.indexOf(row) + 2}: ${error.message}`);
@@ -2244,9 +2273,46 @@ Stores: ${state.stores}`;
                     continue;
                 }
 
-                // For now, we'll just count successful rows
-                // In a full implementation, you'd call the backend API
-                successCount++;
+                // Call backend API to create/update employee
+                try {
+                    let response;
+                    
+                    if (existingEmployee && overwriteExisting) {
+                        // Update existing employee
+                        response = await this.apiCall(`/api/users/${existingEmployee.id}`, {
+                            method: 'PUT',
+                            body: JSON.stringify({
+                                username: row['帳號'],
+                                fullName: row['姓名'],
+                                employeeId: row['員工編號'],
+                                storeId: parseInt(row['門市ID']) || 1,
+                                role: row['角色'] === '主管' ? 'manager' : 'employee'
+                            })
+                        });
+                    } else {
+                        // Create new employee
+                        response = await this.apiCall('/api/users', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                username: row['帳號'],
+                                password: '123456', // Default password
+                                fullName: row['姓名'],
+                                employeeId: row['員工編號'],
+                                storeId: parseInt(row['門市ID']) || 1,
+                                role: row['角色'] === '主管' ? 'manager' : 'employee'
+                            })
+                        });
+                    }
+
+                    if (response.success) {
+                        successCount++;
+                        console.log(`Successfully ${existingEmployee && overwriteExisting ? 'updated' : 'created'} employee: ${row['姓名']}`);
+                    } else {
+                        errors.push(`行 ${data.indexOf(row) + 2}: ${existingEmployee && overwriteExisting ? '更新' : '新增'}員工失敗 - ${response.message}`);
+                    }
+                } catch (apiError) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: API 錯誤 - ${apiError.message}`);
+                }
                 
             } catch (error) {
                 errors.push(`行 ${data.indexOf(row) + 2}: ${error.message}`);
@@ -2281,9 +2347,43 @@ Stores: ${state.stores}`;
                     continue;
                 }
 
-                // For now, we'll just count successful rows
-                // In a full implementation, you'd call the backend API
-                successCount++;
+                // Call backend API to create/update gift
+                try {
+                    let response;
+                    
+                    if (existingGift && overwriteExisting) {
+                        // Update existing gift
+                        response = await this.apiCall(`/api/gifts/${existingGift.id}`, {
+                            method: 'PUT',
+                            body: JSON.stringify({
+                                giftCode: row['贈品編號'],
+                                giftName: row['贈品名稱'],
+                                category: row['類別'] || '未分類',
+                                status: row['狀態'] === '停用' ? 'inactive' : 'active'
+                            })
+                        });
+                    } else {
+                        // Create new gift
+                        response = await this.apiCall('/api/gifts', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                giftCode: row['贈品編號'],
+                                giftName: row['贈品名稱'],
+                                category: row['類別'] || '未分類',
+                                status: row['狀態'] === '停用' ? 'inactive' : 'active'
+                            })
+                        });
+                    }
+
+                    if (response.success) {
+                        successCount++;
+                        console.log(`Successfully ${existingGift && overwriteExisting ? 'updated' : 'created'} gift: ${row['贈品名稱']}`);
+                    } else {
+                        errors.push(`行 ${data.indexOf(row) + 2}: ${existingGift && overwriteExisting ? '更新' : '新增'}贈品失敗 - ${response.message}`);
+                    }
+                } catch (apiError) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: API 錯誤 - ${apiError.message}`);
+                }
                 
             } catch (error) {
                 errors.push(`行 ${data.indexOf(row) + 2}: ${error.message}`);
