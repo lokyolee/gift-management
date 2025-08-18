@@ -164,20 +164,51 @@ class GiftManagementApp {
     async refreshInventoryData() {
         try {
             console.log('Refreshing inventory data...');
-            const response = await this.apiCall('/api/inventory/all');
-            console.log('Inventory response:', response);
             
-            if (response && Array.isArray(response)) {
-                this.data.giftInventory = response.map(inv => ({
-                    userId: inv.userId,
-                    giftId: inv.giftId,
-                    quantity: inv.quantity,
-                    lastUpdated: inv.lastUpdated
-                }));
-                console.log(`Loaded ${this.data.giftInventory.length} inventory records`);
+            let response;
+            if (this.currentUser && this.currentUser.role === 'manager') {
+                // Managers can see all inventory
+                response = await this.apiCall('/api/inventory/all');
+                console.log('Manager inventory response:', response);
+                
+                if (response && Array.isArray(response)) {
+                    this.data.giftInventory = response.map(inv => ({
+                        userId: inv.userId,
+                        giftId: inv.giftId,
+                        quantity: inv.quantity,
+                        lastUpdated: inv.lastUpdated
+                    }));
+                    console.log(`Loaded ${this.data.giftInventory.length} inventory records for manager`);
+                }
             } else {
+                // Employees can only see their own inventory
+                response = await this.apiCall('/api/inventory/my');
+                console.log('Employee inventory response:', response);
+                
+                if (response && Array.isArray(response)) {
+                    // For employees, we need to merge with existing inventory data
+                    // to avoid losing other users' data that might be cached
+                    const userInventory = response.map(inv => ({
+                        userId: inv.userId,
+                        giftId: inv.giftId,
+                        quantity: inv.quantity,
+                        lastUpdated: inv.lastUpdated
+                    }));
+                    
+                    // Update only the current user's inventory in the global data
+                    this.data.giftInventory = this.data.giftInventory.filter(inv => 
+                        inv.userId !== this.currentUser.id
+                    );
+                    this.data.giftInventory.push(...userInventory);
+                    
+                    console.log(`Updated inventory for user ${this.currentUser.id}, total records: ${this.data.giftInventory.length}`);
+                }
+            }
+            
+            if (!response || !Array.isArray(response)) {
                 console.warn('Unexpected inventory data format:', response);
             }
+            
             console.log('Inventory data refreshed successfully');
         } catch (error) {
             console.error('Failed to refresh inventory data:', error);
@@ -555,6 +586,46 @@ Stores: ${state.stores}`;
         return true;
     }
 
+    // Load current user's personal inventory
+    async loadUserInventory() {
+        try {
+            console.log('Loading personal inventory for user:', this.currentUser.id);
+            
+            if (!this.currentUser || !this.currentUser.id) {
+                console.warn('No current user available for inventory loading');
+                return false;
+            }
+            
+            const response = await this.apiCall('/api/inventory/my');
+            console.log('Personal inventory response:', response);
+            
+            if (response && Array.isArray(response)) {
+                // Update the current user's inventory in the global data
+                const userInventory = response.map(inv => ({
+                    userId: inv.userId,
+                    giftId: inv.giftId,
+                    quantity: inv.quantity,
+                    lastUpdated: inv.lastUpdated
+                }));
+                
+                // Remove existing inventory for this user and add new data
+                this.data.giftInventory = this.data.giftInventory.filter(inv => 
+                    inv.userId !== this.currentUser.id
+                );
+                this.data.giftInventory.push(...userInventory);
+                
+                console.log(`Loaded ${userInventory.length} inventory items for user ${this.currentUser.id}`);
+                return true;
+            } else {
+                console.warn('Unexpected personal inventory response format:', response);
+                return false;
+            }
+        } catch (error) {
+            console.error('Failed to load personal inventory:', error);
+            return false;
+        }
+    }
+
     // Bind all event listeners
     bindEvents() {
         // Login events - make sure elements exist before binding
@@ -674,6 +745,16 @@ Stores: ${state.stores}`;
             validateSessionBtn.addEventListener('click', () => this.validateUserSession());
         }
 
+        // Refresh personal inventory functionality
+        const refreshPersonalInventoryBtn = document.getElementById('refreshPersonalInventory');
+        if (refreshPersonalInventoryBtn) {
+            refreshPersonalInventoryBtn.addEventListener('click', async () => {
+                await this.loadUserInventory();
+                await this.loadInventory();
+                this.showSuccess('個人庫存已重新整理');
+            });
+        }
+
         // Employee management functionality
         const addEmployeeBtn = document.getElementById('addEmployee');
         if (addEmployeeBtn) {
@@ -741,15 +822,12 @@ Stores: ${state.stores}`;
         this.showLoading(true);
 
         try {
-            const response = await fetch('/api/auth/login', {
+            const response = await this.apiCall('/api/auth/login', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
                 body: JSON.stringify({ username, password })
             });
 
-            const data = await response.json();
+            const data = response;
 
             if (data.success) {
                 // Save token and user info
@@ -796,6 +874,10 @@ Stores: ${state.stores}`;
                 if (welcomeEl) {
                     welcomeEl.textContent = `歡迎，${this.currentUser.fullName}`;
                 }
+                
+                // Load personal inventory first
+                await this.loadUserInventory();
+                
                 await this.loadInventory();
                 this.loadGiftOptions();
                 this.loadEmployeeOptions();
@@ -880,6 +962,12 @@ Stores: ${state.stores}`;
                 `;
                 return;
             }
+        }
+
+        // Ensure we have inventory data for the current user
+        if (!this.data.giftInventory || this.data.giftInventory.length === 0) {
+            console.log('No inventory data available, refreshing...');
+            await this.refreshInventoryData();
         }
 
         console.log('Loading inventory for user:', this.currentUser.fullName, 'ID:', this.currentUser.id);
@@ -1119,7 +1207,18 @@ Stores: ${state.stores}`;
             });
             
             if (response.success) {
-                // Refresh only inventory data, not all data
+                // Update local inventory immediately to show the change
+                const userInventory = this.data.giftInventory.find(inv => 
+                    inv.userId === this.currentUser.id && inv.giftId === giftId
+                );
+                
+                if (userInventory) {
+                    userInventory.quantity -= quantity;
+                    userInventory.lastUpdated = new Date().toISOString();
+                    console.log(`Updated local inventory: ${giftId} quantity reduced by ${quantity}`);
+                }
+                
+                // Also refresh from backend to ensure consistency
                 await this.refreshInventoryData();
                 
                 // Ensure current user is preserved
