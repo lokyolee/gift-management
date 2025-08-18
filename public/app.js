@@ -775,6 +775,24 @@ Stores: ${state.stores}`;
             testAPIRoutingBtn.addEventListener('click', () => this.testAPIRouting());
         }
 
+        // Refresh employee options functionality
+        const refreshEmployeeOptionsBtn = document.getElementById('refreshEmployeeOptions');
+        if (refreshEmployeeOptionsBtn) {
+            refreshEmployeeOptionsBtn.addEventListener('click', () => this.refreshEmployeeOptions());
+        }
+
+        // Tab click events for refreshing data
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tabName = e.target.dataset.tab;
+                if (tabName === 'transfer') {
+                    console.log('Transfer tab clicked, refreshing employee options...');
+                    this.loadEmployeeOptions();
+                }
+            });
+        });
+
         // Employee management functionality
         const addEmployeeBtn = document.getElementById('addEmployee');
         if (addEmployeeBtn) {
@@ -1059,15 +1077,43 @@ Stores: ${state.stores}`;
     loadEmployeeOptions() {
         const select = document.getElementById('transferTarget');
         if (select && this.currentUser) {
-            const colleagues = this.data.users.filter(u => 
-                u.id !== this.currentUser.id && 
-                u.role === 'employee' && 
-                u.status === 'active'
-            );
-            select.innerHTML = '<option value="">請選擇同事</option>' +
-                colleagues.map(user => 
-                    `<option value="${user.id}">${user.fullName} (${user.employeeId})</option>`
-                ).join('');
+            console.log('Loading employee options for user:', this.currentUser.fullName, 'Role:', this.currentUser.role);
+            console.log('Available users:', this.data.users.length);
+            
+            let colleagues;
+            
+            if (this.currentUser.role === 'employee') {
+                // Employees can transfer to other employees and managers
+                colleagues = this.data.users.filter(u => 
+                    u.id !== this.currentUser.id && 
+                    u.status === 'active'
+                );
+            } else if (this.currentUser.role === 'manager') {
+                // Managers can transfer to employees
+                colleagues = this.data.users.filter(u => 
+                    u.id !== this.currentUser.id && 
+                    u.role === 'employee' && 
+                    u.status === 'active'
+                );
+            } else {
+                colleagues = [];
+            }
+            
+            console.log('Filtered colleagues:', colleagues.length);
+            console.log('Colleagues:', colleagues.map(u => `${u.fullName} (${u.role})`));
+            
+            if (colleagues.length === 0) {
+                select.innerHTML = '<option value="">暫無可選擇的同事</option>';
+                console.warn('No colleagues available for transfer');
+            } else {
+                select.innerHTML = '<option value="">請選擇同事</option>' +
+                    colleagues.map(user => 
+                        `<option value="${user.id}">${user.fullName} (${user.employeeId}) - ${user.role === 'manager' ? '主管' : '員工'}</option>`
+                    ).join('');
+                console.log('Employee options loaded successfully');
+            }
+        } else {
+            console.warn('Cannot load employee options: select element or current user not available');
         }
     }
 
@@ -2501,6 +2547,37 @@ Stores: ${state.stores}`;
         } catch (error) {
             console.error('API routing test failed:', error);
             this.showError('API路由測試失敗：' + error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    // Refresh employee options
+    async refreshEmployeeOptions() {
+        try {
+            this.showLoading(true);
+            console.log('Refreshing employee options...');
+            
+            // First refresh user data to ensure we have the latest
+            await this.refreshUserData();
+            
+            // Then load employee options
+            this.loadEmployeeOptions();
+            
+            this.showSuccess('同事選項已重新整理');
+            
+            // Show current data state
+            this.showDataState('Employee Options Refresh', {
+                users: this.data.users.length,
+                inventory: this.data.giftInventory.length,
+                requests: this.data.pendingRequests.length,
+                gifts: this.data.gifts.length,
+                stores: this.data.stores.length
+            });
+            
+        } catch (error) {
+            console.error('Failed to refresh employee options:', error);
+            this.showError('重新整理同事選項失敗：' + error.message);
         } finally {
             this.showLoading(false);
         }
