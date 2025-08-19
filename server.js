@@ -1252,10 +1252,120 @@ app.put(`${BASE_PATH}/api/gifts/:id`, authenticateToken, requireRole(['manager']
 app.get(`${BASE_PATH}/api/stores`, authenticateToken, async (req, res) => {
     try {
         const data = await readData();
-        const stores = data.stores.filter(s => s.status === 'active');
+        const user = data.users.find(u => u.username === req.user.username);
+        
+        // Managers can see all stores, employees only see active stores
+        let stores = data.stores;
+        if (user && user.role !== 'manager') {
+            stores = data.stores.filter(s => s.status === 'active');
+        }
+        
         res.json(stores);
     } catch (error) {
         console.error('Get stores error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
+// 新增門店
+app.post(`${BASE_PATH}/api/stores`, authenticateToken, async (req, res) => {
+    try {
+        const { storeCode, storeName, address, status = 'active' } = req.body;
+        
+        if (!storeCode || !storeName) {
+            return res.status(400).json({ 
+                success: false, 
+                message: '門店編號和門店名稱為必填欄位' 
+            });
+        }
+        
+        const data = await readData();
+        
+        // 檢查門店編號是否已存在
+        const existingStore = data.stores.find(s => s.storeCode === storeCode);
+        if (existingStore) {
+            return res.status(400).json({ 
+                success: false, 
+                message: '門店編號已存在' 
+            });
+        }
+        
+        // 建立新門店
+        const newStore = {
+            id: Math.max(...data.stores.map(s => s.id), 0) + 1,
+            storeCode,
+            storeName,
+            address: address || '',
+            status,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        
+        data.stores.push(newStore);
+        await writeData(data);
+        
+        res.json({ 
+            success: true, 
+            store: newStore,
+            message: '門店新增成功' 
+        });
+        
+    } catch (error) {
+        console.error('Create store error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
+// 更新門店
+app.put(`${BASE_PATH}/api/stores/:id`, authenticateToken, async (req, res) => {
+    try {
+        const storeId = parseInt(req.params.id);
+        const { storeCode, storeName, address, status } = req.body;
+        
+        if (!storeCode || !storeName) {
+            return res.status(400).json({ 
+                success: false, 
+                message: '門店編號和門店名稱為必填欄位' 
+            });
+        }
+        
+        const data = await readData();
+        const storeIndex = data.stores.findIndex(s => s.id === storeId);
+        
+        if (storeIndex === -1) {
+            return res.status(404).json({ 
+                success: false, 
+                message: '門店不存在' 
+            });
+        }
+        
+        // 檢查門店編號是否已被其他門店使用
+        const existingStore = data.stores.find(s => s.storeCode === storeCode && s.id !== storeId);
+        if (existingStore) {
+            return res.status(400).json({ 
+                success: false, 
+                message: '門店編號已被其他門店使用' 
+            });
+        }
+        
+        // 更新門店資料
+        if (storeCode !== undefined) data.stores[storeIndex].storeCode = storeCode;
+        if (storeName !== undefined) data.stores[storeIndex].storeName = storeName;
+        if (address !== undefined) data.stores[storeIndex].address = address;
+        if (status !== undefined) data.stores[storeIndex].status = status;
+        
+        data.stores[storeIndex].updatedAt = new Date().toISOString();
+        
+        await writeData(data);
+        
+        res.json({ 
+            success: true, 
+            store: data.stores[storeIndex],
+            message: '門店更新成功' 
+        });
+        
+    } catch (error) {
+        console.error('Update store error:', error);
         res.status(500).json({ success: false, message: '伺服器錯誤' });
     }
 });
