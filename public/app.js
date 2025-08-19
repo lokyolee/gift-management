@@ -717,6 +717,16 @@ Stores: ${state.stores}`;
             importBtn.addEventListener('click', () => this.openImportExcelModal());
         }
 
+        const editStoresBtn = document.getElementById('editStores');
+        if (editStoresBtn) {
+            editStoresBtn.addEventListener('click', () => this.openEditStoresModal());
+        }
+
+        const editGiftsBtn = document.getElementById('editGifts');
+        if (editGiftsBtn) {
+            editGiftsBtn.addEventListener('click', () => this.openEditGiftsModal());
+        }
+
         // Test data persistence functionality
         const testDataBtn = document.getElementById('testDataPersistence');
         if (testDataBtn) {
@@ -835,11 +845,19 @@ Stores: ${state.stores}`;
             closeBtn.addEventListener('click', (e) => {
                 const modal = e.target.closest('.modal');
                 if (modal) {
-                    if (modal.id === 'importExcelModal') {
-                        this.closeImportExcelModal();
-                    } else if (modal.id === 'exportExcelModal') {
-                        this.closeExportExcelModal();
-                    } else {
+                            if (modal.id === 'importExcelModal') {
+            this.closeImportExcelModal();
+        } else if (modal.id === 'exportExcelModal') {
+            this.closeExportExcelModal();
+        } else if (modal.id === 'editStoresModal') {
+            this.closeEditStoresModal();
+        } else if (modal.id === 'editGiftsModal') {
+            this.closeEditGiftsModal();
+        } else if (modal.id === 'storeFormModal') {
+            this.closeStoreFormModal();
+        } else if (modal.id === 'giftFormModal') {
+            this.closeGiftFormModal();
+        } else {
                         this.closeModal();
                     }
                 }
@@ -2715,6 +2733,402 @@ Stores: ${state.stores}`;
         }
 
         return { successCount, errors };
+    }
+
+    // =============================================================================
+    // Store Management Functions
+    // =============================================================================
+
+    // Open Edit Stores Modal
+    openEditStoresModal() {
+        const modal = document.getElementById('editStoresModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            this.loadStoresList();
+            this.setupStoreModalEvents();
+        }
+    }
+
+    // Close Edit Stores Modal
+    closeEditStoresModal() {
+        const modal = document.getElementById('editStoresModal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    // Load stores list
+    loadStoresList() {
+        const storesList = document.getElementById('storesList');
+        if (!storesList) return;
+
+        storesList.innerHTML = this.data.stores.map(store => `
+            <div class="store-item" data-store-id="${store.id}">
+                <div class="store-info">
+                    <div class="store-code">${store.storeCode}</div>
+                    <div class="store-name">${store.storeName}</div>
+                    <div class="store-address">${store.address || '無地址'}</div>
+                    <div class="store-status ${store.status}">${store.status === 'active' ? '啟用' : '停用'}</div>
+                </div>
+                <div class="store-actions">
+                    <button class="btn btn--secondary btn--xs" onclick="app.editStore(${store.id})">編輯</button>
+                    <button class="btn btn--danger btn--xs" onclick="app.deleteStore(${store.id})">刪除</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Setup store modal events
+    setupStoreModalEvents() {
+        const addStoreBtn = document.getElementById('addStoreBtn');
+        if (addStoreBtn) {
+            addStoreBtn.addEventListener('click', () => this.openStoreFormModal());
+        }
+    }
+
+    // Open Store Form Modal
+    openStoreFormModal(storeId = null) {
+        const modal = document.getElementById('storeFormModal');
+        const title = document.getElementById('storeFormTitle');
+        const form = document.getElementById('storeForm');
+        
+        if (storeId) {
+            // Edit mode
+            const store = this.data.stores.find(s => s.id === storeId);
+            if (store) {
+                title.textContent = '編輯門店';
+                document.getElementById('storeId').value = store.id;
+                document.getElementById('storeCode').value = store.storeCode;
+                document.getElementById('storeName').value = store.storeName;
+                document.getElementById('storeAddress').value = store.address || '';
+                document.getElementById('storeStatus').value = store.status;
+            }
+        } else {
+            // Add mode
+            title.textContent = '新增門店';
+            form.reset();
+            document.getElementById('storeId').value = '';
+        }
+        
+        modal.classList.remove('hidden');
+        this.setupStoreFormEvents();
+    }
+
+    // Close Store Form Modal
+    closeStoreFormModal() {
+        const modal = document.getElementById('storeFormModal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    // Setup store form events
+    setupStoreFormEvents() {
+        const form = document.getElementById('storeForm');
+        if (form) {
+            form.onsubmit = (e) => {
+                e.preventDefault();
+                this.saveStore();
+            };
+        }
+    }
+
+    // Save store
+    async saveStore() {
+        const storeId = document.getElementById('storeId').value;
+        const storeCode = document.getElementById('storeCode').value;
+        const storeName = document.getElementById('storeName').value;
+        const storeAddress = document.getElementById('storeAddress').value;
+        const storeStatus = document.getElementById('storeStatus').value;
+
+        if (!storeCode || !storeName) {
+            this.showError('門店編號和名稱為必填欄位');
+            return;
+        }
+
+        try {
+            let response;
+            if (storeId) {
+                // Update existing store
+                response = await this.apiCall(`/api/stores/${storeId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        storeCode,
+                        storeName,
+                        address: storeAddress,
+                        status: storeStatus
+                    })
+                });
+            } else {
+                // Create new store
+                response = await this.apiCall('/api/stores', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        storeCode,
+                        storeName,
+                        address: storeAddress,
+                        status: storeStatus
+                    })
+                });
+            }
+
+            if (response.success) {
+                this.showSuccess(storeId ? '門店更新成功' : '門店新增成功');
+                await this.loadStoresData();
+                this.loadStoresList();
+                this.closeStoreFormModal();
+            } else {
+                this.showError(response.message || '操作失敗');
+            }
+        } catch (error) {
+            console.error('Save store error:', error);
+            this.showError('儲存失敗：' + error.message);
+        }
+    }
+
+    // Edit store
+    editStore(storeId) {
+        this.openStoreFormModal(storeId);
+    }
+
+    // Delete store
+    async deleteStore(storeId) {
+        const store = this.data.stores.find(s => s.id === storeId);
+        if (!store) return;
+
+        if (confirm(`確定要刪除門店 "${store.storeName}" 嗎？此操作無法復原。`)) {
+            try {
+                // Check if store is being used by employees
+                const employeesUsingStore = this.data.users.filter(u => u.storeId === storeId);
+                if (employeesUsingStore.length > 0) {
+                    this.showError(`無法刪除門店，因為有 ${employeesUsingStore.length} 名員工正在使用此門店`);
+                    return;
+                }
+
+                // For now, we'll just deactivate the store instead of deleting
+                const response = await this.apiCall(`/api/stores/${storeId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        storeCode: store.storeCode,
+                        storeName: store.storeName,
+                        address: store.address,
+                        status: 'inactive'
+                    })
+                });
+
+                if (response.success) {
+                    this.showSuccess('門店已停用');
+                    await this.loadStoresData();
+                    this.loadStoresList();
+                } else {
+                    this.showError(response.message || '停用失敗');
+                }
+            } catch (error) {
+                console.error('Delete store error:', error);
+                this.showError('停用失敗：' + error.message);
+            }
+        }
+    }
+
+    // =============================================================================
+    // Gift Management Functions
+    // =============================================================================
+
+    // Open Edit Gifts Modal
+    openEditGiftsModal() {
+        const modal = document.getElementById('editGiftsModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            this.loadGiftsList();
+            this.setupGiftModalEvents();
+        }
+    }
+
+    // Close Edit Gifts Modal
+    closeEditGiftsModal() {
+        const modal = document.getElementById('editGiftsModal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    // Load gifts list
+    loadGiftsList() {
+        const giftsList = document.getElementById('giftsList');
+        if (!giftsList) return;
+
+        giftsList.innerHTML = this.data.gifts.map(gift => `
+            <div class="gift-item" data-gift-id="${gift.id}">
+                <div class="gift-info">
+                    <div class="gift-code">${gift.giftCode}</div>
+                    <div class="gift-name">${gift.giftName}</div>
+                    <div class="gift-category">${gift.category}</div>
+                    <div class="gift-description">${gift.description || '無描述'}</div>
+                    <div class="gift-status ${gift.status}">${gift.status === 'active' ? '啟用' : '停用'}</div>
+                </div>
+                <div class="gift-actions">
+                    <button class="btn btn--secondary btn--xs" onclick="app.editGift(${gift.id})">編輯</button>
+                    <button class="btn btn--danger btn--xs" onclick="app.deleteGift(${gift.id})">刪除</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Setup gift modal events
+    setupGiftModalEvents() {
+        const addGiftBtn = document.getElementById('addGiftBtn');
+        if (addGiftBtn) {
+            addGiftBtn.addEventListener('click', () => this.openGiftFormModal());
+        }
+    }
+
+    // Open Gift Form Modal
+    openGiftFormModal(giftId = null) {
+        const modal = document.getElementById('giftFormModal');
+        const title = document.getElementById('giftFormTitle');
+        const form = document.getElementById('giftForm');
+        
+        if (giftId) {
+            // Edit mode
+            const gift = this.data.gifts.find(g => g.id === giftId);
+            if (gift) {
+                title.textContent = '編輯贈品';
+                document.getElementById('giftFormId').value = gift.id;
+                document.getElementById('giftFormCode').value = gift.giftCode;
+                document.getElementById('giftFormName').value = gift.giftName;
+                document.getElementById('giftFormCategory').value = gift.category;
+                document.getElementById('giftFormDescription').value = gift.description || '';
+                document.getElementById('giftFormStatus').value = gift.status;
+            }
+        } else {
+            // Add mode
+            title.textContent = '新增贈品';
+            form.reset();
+            document.getElementById('giftFormId').value = '';
+        }
+        
+        modal.classList.remove('hidden');
+        this.setupGiftFormEvents();
+    }
+
+    // Close Gift Form Modal
+    closeGiftFormModal() {
+        const modal = document.getElementById('giftFormModal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    // Setup gift form events
+    setupGiftFormEvents() {
+        const form = document.getElementById('giftForm');
+        if (form) {
+            form.onsubmit = (e) => {
+                e.preventDefault();
+                this.saveGift();
+            };
+        }
+    }
+
+    // Save gift
+    async saveGift() {
+        const giftId = document.getElementById('giftFormId').value;
+        const giftCode = document.getElementById('giftFormCode').value;
+        const giftName = document.getElementById('giftFormName').value;
+        const giftCategory = document.getElementById('giftFormCategory').value;
+        const giftDescription = document.getElementById('giftFormDescription').value;
+        const giftStatus = document.getElementById('giftFormStatus').value;
+
+        if (!giftCode || !giftName || !giftCategory) {
+            this.showError('贈品編號、名稱和類別為必填欄位');
+            return;
+        }
+
+        try {
+            let response;
+            if (giftId) {
+                // Update existing gift
+                response = await this.apiCall(`/api/gifts/${giftId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        giftCode,
+                        giftName,
+                        category: giftCategory,
+                        description: giftDescription,
+                        status: giftStatus
+                    })
+                });
+            } else {
+                // Create new gift
+                response = await this.apiCall('/api/gifts', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        giftCode,
+                        giftName,
+                        category: giftCategory,
+                        description: giftDescription,
+                        status: giftStatus
+                    })
+                });
+            }
+
+            if (response.success) {
+                this.showSuccess(giftId ? '贈品更新成功' : '贈品新增成功');
+                await this.loadGiftsData();
+                this.loadGiftsList();
+                this.closeGiftFormModal();
+            } else {
+                this.showError(response.message || '操作失敗');
+            }
+        } catch (error) {
+            console.error('Save gift error:', error);
+            this.showError('儲存失敗：' + error.message);
+        }
+    }
+
+    // Edit gift
+    editGift(giftId) {
+        this.openGiftFormModal(giftId);
+    }
+
+    // Delete gift
+    async deleteGift(giftId) {
+        const gift = this.data.gifts.find(g => g.id === giftId);
+        if (!gift) return;
+
+        if (confirm(`確定要刪除贈品 "${gift.giftName}" 嗎？此操作無法復原。`)) {
+            try {
+                // Check if gift is being used in inventory
+                const inventoryUsingGift = this.data.giftInventory.filter(inv => inv.giftId === giftId);
+                if (inventoryUsingGift.length > 0) {
+                    this.showError(`無法刪除贈品，因為有 ${inventoryUsingGift.length} 筆庫存記錄正在使用此贈品`);
+                    return;
+                }
+
+                // For now, we'll just deactivate the gift instead of deleting
+                const response = await this.apiCall(`/api/gifts/${giftId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        giftCode: gift.giftCode,
+                        giftName: gift.giftName,
+                        category: gift.category,
+                        description: gift.description,
+                        status: 'inactive'
+                    })
+                });
+
+                if (response.success) {
+                    this.showSuccess('贈品已停用');
+                    await this.loadGiftsData();
+                    this.loadGiftsList();
+                } else {
+                    this.showError(response.message || '停用失敗');
+                }
+            } catch (error) {
+                console.error('Delete gift error:', error);
+                this.showError('停用失敗：' + error.message);
+            }
+        }
     }
 
     // Reset import modal
