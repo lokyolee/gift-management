@@ -1920,6 +1920,12 @@ Stores: ${state.stores}`;
                     headers = giftResult.headers;
                     fileName = `贈品資料報表_${new Date().toISOString().split('T')[0]}`;
                     break;
+                case 'stores':
+                    const storeResult = await this.exportStores(includeInactive, includeTimestamps);
+                    exportData = storeResult.data;
+                    headers = storeResult.headers;
+                    fileName = `門店資料報表_${new Date().toISOString().split('T')[0]}`;
+                    break;
                 default:
                     throw new Error('不支援的匯出類型');
             }
@@ -2067,6 +2073,39 @@ Stores: ${state.stores}`;
             if (includeTimestamps) {
                 row['建立時間'] = gift.createdAt ? new Date(gift.createdAt).toLocaleString('zh-TW') : '';
                 row['最後更新時間'] = gift.updatedAt ? new Date(gift.updatedAt).toLocaleString('zh-TW') : '';
+            }
+            
+            exportData.push(row);
+        });
+
+        return { data: exportData, headers };
+    }
+
+    // Export Stores Data
+    async exportStores(includeInactive, includeTimestamps) {
+        let stores = this.data.stores;
+        if (!includeInactive) {
+            stores = stores.filter(s => s.status === 'active');
+        }
+
+        const exportData = [];
+        const headers = ['門店編號', '門店名稱', '地址', '狀態'];
+        
+        if (includeTimestamps) {
+            headers.push('建立時間', '最後更新時間');
+        }
+
+        stores.forEach(store => {
+            const row = {
+                門店編號: store.storeCode,
+                門店名稱: store.storeName,
+                地址: store.address || '',
+                狀態: store.status === 'active' ? '啟用' : '停用'
+            };
+            
+            if (includeTimestamps) {
+                row['建立時間'] = store.createdAt ? new Date(store.createdAt).toLocaleString('zh-TW') : '';
+                row['最後更新時間'] = store.updatedAt ? new Date(store.updatedAt).toLocaleString('zh-TW') : '';
             }
             
             exportData.push(row);
@@ -2328,6 +2367,9 @@ Stores: ${state.stores}`;
                 case 'gifts':
                     result = await this.importGifts(parsedData.data, overwriteExisting, createMissing);
                     break;
+                case 'stores':
+                    result = await this.importStores(parsedData.data, overwriteExisting, createMissing);
+                    break;
                 default:
                     throw new Error('不支援的匯入類型');
             }
@@ -2573,6 +2615,91 @@ Stores: ${state.stores}`;
                         console.log(`Successfully ${existingGift && overwriteExisting ? 'updated' : 'created'} gift: ${row['贈品名稱']}`);
                     } else {
                         errors.push(`行 ${data.indexOf(row) + 2}: ${existingGift && overwriteExisting ? '更新' : '新增'}贈品失敗 - ${response.message}`);
+                    }
+                } catch (apiError) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: API 錯誤 - ${apiError.message}`);
+                }
+                
+            } catch (error) {
+                errors.push(`行 ${data.indexOf(row) + 2}: ${error.message}`);
+            }
+        }
+
+        if (errors.length > 0) {
+            console.warn('Import errors:', errors);
+        }
+
+        return { successCount, errors };
+    }
+
+    // Import stores data
+    async importStores(data, overwriteExisting, createMissing) {
+        let successCount = 0;
+        let errors = [];
+
+        for (const row of data) {
+            try {
+                // Validate required fields
+                if (!row['門店編號'] || !row['門店名稱']) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: 缺少必要欄位`);
+                    continue;
+                }
+
+                // Check if store exists
+                const existingStore = this.data.stores.find(s => s.storeCode === row['門店編號']);
+
+                if (existingStore && !overwriteExisting) {
+                    errors.push(`行 ${data.indexOf(row) + 2}: 門店已存在 ${row['門店編號']}`);
+                    continue;
+                }
+
+                // Call backend API to create/update store
+                try {
+                    let response;
+                    
+                    console.log('Processing store row:', row);
+                    console.log('Existing store:', existingStore);
+                    console.log('Overwrite existing:', overwriteExisting);
+                    
+                    if (existingStore && overwriteExisting) {
+                        // Update existing store
+                        console.log('Updating existing store:', existingStore.id);
+                        response = await this.apiCall(`/api/stores/${existingStore.id}`, {
+                            method: 'PUT',
+                            body: JSON.stringify({
+                                storeCode: row['門店編號'],
+                                storeName: row['門店名稱'],
+                                address: row['地址'] || '',
+                                status: row['狀態'] === '停用' ? 'inactive' : 'active'
+                            })
+                        });
+                    } else {
+                        // Create new store
+                        console.log('Creating new store with data:', {
+                            storeCode: row['門店編號'],
+                            storeName: row['門店名稱'],
+                            address: row['地址'] || '',
+                            status: row['狀態'] === '停用' ? 'inactive' : 'active'
+                        });
+                        
+                        response = await this.apiCall('/api/stores', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                storeCode: row['門店編號'],
+                                storeName: row['門店名稱'],
+                                address: row['地址'] || '',
+                                status: row['狀態'] === '停用' ? 'active'
+                            })
+                        });
+                    }
+                    
+                    console.log('API response:', response);
+
+                    if (response.success) {
+                        successCount++;
+                        console.log(`Successfully ${existingStore && overwriteExisting ? 'updated' : 'created'} store: ${row['門店名稱']}`);
+                    } else {
+                        errors.push(`行 ${data.indexOf(row) + 2}: ${existingStore && overwriteExisting ? '更新' : '新增'}門店失敗 - ${response.message}`);
                     }
                 } catch (apiError) {
                     errors.push(`行 ${data.indexOf(row) + 2}: API 錯誤 - ${apiError.message}`);
