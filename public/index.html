@@ -206,6 +206,8 @@
                 <div class="dashboard-actions">
                     <button id="exportExcel" class="btn btn--secondary btn--sm">匯出Excel</button>
                     <button id="importExcel" class="btn btn--secondary btn--sm">匯入Excel</button>
+                    <button id="editStores" class="btn btn--primary btn--sm">編輯門店</button>
+                    <button id="editGifts" class="btn btn--primary btn--sm">編輯贈品</button>
                     <button id="refreshDashboard" class="btn btn--secondary btn--sm">重新整理</button>
                     <button id="testDataPersistence" class="btn btn--outline btn--sm">測試資料持久性</button>
                     <button id="forceRefreshData" class="btn btn--outline btn--sm">強制重新整理</button>
@@ -606,6 +608,122 @@
             <div class="modal-actions">
                 <button type="button" class="btn btn--primary" id="startExportBtn">開始匯出</button>
                 <button type="button" class="btn btn--secondary" onclick="app.closeExportExcelModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Stores Modal -->
+    <div id="editStoresModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>編輯門店資料</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="stores-header">
+                    <button id="addStoreBtn" class="btn btn--primary btn--sm">新增門店</button>
+                </div>
+                <div class="stores-list" id="storesList">
+                    <!-- Stores will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Store Modal -->
+    <div id="storeFormModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="storeFormTitle">新增門店</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="storeForm">
+                    <input type="hidden" id="storeId">
+                    <div class="form-group">
+                        <label class="form-label">門店編號</label>
+                        <input type="text" id="storeCode" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">門店名稱</label>
+                        <input type="text" id="storeName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">地址</label>
+                        <input type="text" id="storeAddress" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">狀態</label>
+                        <select id="storeStatus" class="form-control" required>
+                            <option value="active">啟用</option>
+                            <option value="inactive">停用</option>
+                        </select>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn--outline" onclick="app.closeStoreFormModal()">取消</button>
+                        <button type="submit" class="btn btn--primary">儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Gifts Modal -->
+    <div id="editGiftsModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>編輯贈品資料</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="gifts-header">
+                    <button id="addGiftBtn" class="btn btn--primary btn--sm">新增贈品</button>
+                </div>
+                <div class="gifts-list" id="giftsList">
+                    <!-- Gifts will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Gift Modal -->
+    <div id="giftFormModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="giftFormTitle">新增贈品</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="giftForm">
+                    <input type="hidden" id="giftFormId">
+                    <div class="form-group">
+                        <label class="form-label">贈品編號</label>
+                        <input type="text" id="giftFormCode" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">贈品名稱</label>
+                        <input type="text" id="giftFormName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">類別</label>
+                        <input type="text" id="giftFormCategory" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">描述</label>
+                        <textarea id="giftFormDescription" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">狀態</label>
+                        <select id="giftFormStatus" class="form-control" required>
+                            <option value="active">啟用</option>
+                            <option value="inactive">停用</option>
+                        </select>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn--outline" onclick="app.closeGiftFormModal()">取消</button>
+                        <button type="submit" class="btn btn--primary">儲存</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
