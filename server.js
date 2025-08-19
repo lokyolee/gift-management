@@ -1,6 +1,7 @@
 // 完整贈品管理系統後端伺服器
 const express = require('express');
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -31,9 +32,17 @@ if (BASE_PATH) {
 // 確保資料目錄存在
 async function ensureDataDirectory() {
     try {
-        await fs.access(DATA_DIR);
-    } catch {
-        await fs.mkdir(DATA_DIR, { recursive: true });
+        console.log('Checking data directory:', DATA_DIR);
+        if (fs.existsSync(DATA_DIR)) {
+            console.log('Data directory exists');
+        } else {
+            console.log('Data directory does not exist, creating...');
+            fs.mkdirSync(DATA_DIR, { recursive: true });
+            console.log('Data directory created');
+        }
+    } catch (error) {
+        console.error('Error with data directory:', error);
+        throw error;
     }
 }
 
@@ -191,8 +200,11 @@ function getInitialData() {
 // 讀取資料
 async function readData() {
     try {
-        const data = await fs.readFile(DATA_FILE, 'utf8');
-        return JSON.parse(data);
+        console.log('Reading data from file:', DATA_FILE);
+        const data = await fsPromises.readFile(DATA_FILE, 'utf8');
+        const parsedData = JSON.parse(data);
+        console.log('Data loaded successfully, gifts count:', parsedData.gifts ? parsedData.gifts.length : 'undefined');
+        return parsedData;
     } catch (error) {
         console.log('初次啟動，建立初始資料...');
         const initialData = getInitialData();
@@ -203,7 +215,14 @@ async function readData() {
 
 // 寫入資料
 async function writeData(data) {
-    await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+    try {
+        console.log('Writing data to file:', DATA_FILE);
+        await fsPromises.writeFile(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+        console.log('Data written successfully');
+    } catch (error) {
+        console.error('Error writing data:', error);
+        throw error;
+    }
 }
 
 // JWT 中間件
@@ -1302,33 +1321,73 @@ app.put(`${BASE_PATH}/api/gifts/:id`, authenticateToken, requireRole(['manager']
 // 刪除贈品
 app.delete(`${BASE_PATH}/api/gifts/:id`, authenticateToken, requireRole(['manager']), async (req, res) => {
     try {
+        console.log('Delete gift request received for ID:', req.params.id);
         const giftId = parseInt(req.params.id);
+        console.log('Parsed gift ID:', giftId);
         
         const data = await readData();
+        console.log('Data loaded, gifts count:', data.gifts ? data.gifts.length : 'undefined');
+        
+        // Validate data structure
+        if (!data.gifts || !Array.isArray(data.gifts)) {
+            console.error('Invalid data structure: gifts array is missing or not an array');
+            return res.status(500).json({ 
+                success: false, 
+                message: '資料結構錯誤' 
+            });
+        }
+        
         const giftIndex = data.gifts.findIndex(g => g.id === giftId);
+        console.log('Gift index found:', giftIndex);
         
         if (giftIndex === -1) {
+            console.log('Gift not found');
             return res.status(404).json({ 
                 success: false, 
                 message: '找不到贈品' 
             });
         }
         
+        console.log('Gift to delete:', data.gifts[giftIndex]);
+        
         // Remove the gift from the gifts array
         const deletedGift = data.gifts.splice(giftIndex, 1)[0];
+        console.log('Gift removed from array, new gifts count:', data.gifts.length);
+        
+        // Ensure arrays exist
+        if (!data.giftInventory) {
+            data.giftInventory = [];
+        }
+        if (!data.giftRequests) {
+            data.giftRequests = [];
+        }
         
         // Remove all inventory records for this gift
-        const initialInventoryCount = data.giftInventory.length;
-        data.giftInventory = data.giftInventory.filter(inv => inv.giftId !== giftId);
-        const removedInventoryCount = initialInventoryCount - data.giftInventory.length;
+        const initialInventoryCount = data.giftInventory ? data.giftInventory.length : 0;
+        if (data.giftInventory) {
+            data.giftInventory = data.giftInventory.filter(inv => inv.giftId !== giftId);
+        }
+        const removedInventoryCount = initialInventoryCount - (data.giftInventory ? data.giftInventory.length : 0);
+        console.log('Inventory records removed:', removedInventoryCount);
         
         // Remove all gift requests for this gift
-        const initialRequestsCount = data.giftRequests.length;
-        data.giftRequests = data.giftRequests.filter(req => req.giftId !== giftId);
-        const removedRequestsCount = initialRequestsCount - data.giftRequests.length;
+        const initialRequestsCount = data.giftRequests ? data.giftRequests.length : 0;
+        if (data.giftRequests) {
+            data.giftRequests = data.giftRequests.filter(req => req.giftId !== giftId);
+        }
+        const removedRequestsCount = initialRequestsCount - (data.giftRequests ? data.giftRequests.length : 0);
+        console.log('Request records removed:', removedRequestsCount);
+        
+        console.log('About to write data...');
+        console.log('Data structure before writing:', {
+            giftsCount: data.gifts ? data.gifts.length : 'undefined',
+            inventoryCount: data.giftInventory ? data.giftInventory.length : 'undefined',
+            requestsCount: data.giftRequests ? data.giftRequests.length : 'undefined'
+        });
         
         // Save the updated data
         await writeData(data);
+        console.log('Data written successfully');
         
         res.json({ 
             success: true, 
@@ -1340,7 +1399,8 @@ app.delete(`${BASE_PATH}/api/gifts/:id`, authenticateToken, requireRole(['manage
         
     } catch (error) {
         console.error('Delete gift error:', error);
-        res.status(500).json({ success: false, message: '伺服器錯誤' });
+        console.error('Error stack:', error.stack);
+        res.status(500).json({ success: false, message: '伺服器錯誤: ' + error.message });
     }
 });
 
