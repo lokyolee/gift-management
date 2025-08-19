@@ -3096,37 +3096,58 @@ Stores: ${state.stores}`;
         const gift = this.data.gifts.find(g => g.id === giftId);
         if (!gift) return;
 
-        if (confirm(`確定要刪除贈品 "${gift.giftName}" 嗎？此操作無法復原。`)) {
+        if (confirm(`確定要刪除贈品 "${gift.giftName}" 嗎？此操作將同時刪除所有員工的相關庫存記錄，無法復原。`)) {
             try {
                 // Check if gift is being used in inventory
                 const inventoryUsingGift = this.data.giftInventory.filter(inv => inv.giftId === giftId);
+                
                 if (inventoryUsingGift.length > 0) {
-                    this.showError(`無法刪除贈品，因為有 ${inventoryUsingGift.length} 筆庫存記錄正在使用此贈品`);
-                    return;
+                    // Show warning about inventory records that will be deleted
+                    const confirmDelete = confirm(
+                        `此贈品在 ${inventoryUsingGift.length} 名員工的庫存中有記錄。\n\n` +
+                        `刪除贈品將同時刪除所有相關的庫存記錄。\n\n` +
+                        `確定要繼續嗎？`
+                    );
+                    
+                    if (!confirmDelete) {
+                        return;
+                    }
                 }
 
-                // For now, we'll just deactivate the gift instead of deleting
+                // Note: The server will automatically delete all inventory records when deleting a gift
+                console.log(`Gift ${gift.giftName} has ${inventoryUsingGift.length} inventory records that will be automatically deleted`);
+
+                // Now delete the gift itself
                 const response = await this.apiCall(`/api/gifts/${giftId}`, {
-                    method: 'PUT',
-                    body: JSON.stringify({
-                        giftCode: gift.giftCode,
-                        giftName: gift.giftName,
-                        category: gift.category,
-                        description: gift.description,
-                        status: 'inactive'
-                    })
+                    method: 'DELETE'
                 });
 
                 if (response.success) {
-                    this.showSuccess('贈品已停用');
-                    await this.loadGiftsData();
+                    // The server response includes the counts of removed records
+                    const removedInventoryCount = response.removedInventoryCount || 0;
+                    const removedRequestsCount = response.removedRequestsCount || 0;
+                    
+                    this.showSuccess(`贈品 "${gift.giftName}" 已刪除，同時清理了 ${removedInventoryCount} 筆庫存記錄和 ${removedRequestsCount} 筆申請記錄`);
+                    
+                    // Refresh all data to reflect the changes
+                    await Promise.all([
+                        this.loadGiftsData(),
+                        this.loadInventoryData()
+                    ]);
+                    
+                    // Update the gifts list display
                     this.loadGiftsList();
+                    
+                    // If we're on the dashboard view, refresh it too
+                    if (this.currentView === 'dashboard') {
+                        this.refreshDashboard();
+                    }
                 } else {
-                    this.showError(response.message || '停用失敗');
+                    this.showError(response.message || '刪除贈品失敗');
                 }
             } catch (error) {
                 console.error('Delete gift error:', error);
-                this.showError('停用失敗：' + error.message);
+                this.showError('刪除失敗：' + error.message);
             }
         }
     }
