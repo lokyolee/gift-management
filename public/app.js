@@ -3132,17 +3132,22 @@ Stores: ${state.stores}`;
                     this.showSuccess(`贈品 "${gift.giftName}" 已刪除，同時清理了 ${removedInventoryCount} 筆庫存記錄和 ${removedRequestsCount} 筆申請記錄`);
                     
                     // Refresh all data to reflect the changes
-                    await Promise.all([
-                        this.loadGiftsData(),
-                        this.loadInventoryData()
-                    ]);
-                    
-                    // Update the gifts list display
-                    this.loadGiftsList();
-                    
-                    // If we're on the dashboard view, refresh it too
-                    if (this.currentView === 'dashboard') {
-                        this.refreshDashboard();
+                    try {
+                        await Promise.all([
+                            this.loadGiftsData(),
+                            this.loadInventory()
+                        ]);
+                        
+                        // Update the gifts list display
+                        this.loadGiftsList();
+                        
+                        // If we're on the dashboard view, refresh it too
+                        if (this.currentView === 'dashboard') {
+                            this.refreshDashboard();
+                        }
+                    } catch (refreshError) {
+                        console.warn('Some data refresh operations failed:', refreshError);
+                        // Continue with the success message even if refresh fails
                     }
                 } else {
                     this.showError(response.message || '刪除贈品失敗');
