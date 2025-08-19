@@ -455,6 +455,57 @@ app.put(`${BASE_PATH}/api/inventory/:userId/:giftId`, authenticateToken, require
     }
 });
 
+// 刪除庫存記錄 (主管)
+app.delete(`${BASE_PATH}/api/inventory/:userId/:giftId`, authenticateToken, requireRole(['manager']), async (req, res) => {
+    try {
+        const userId = parseInt(req.params.userId);
+        const giftId = parseInt(req.params.giftId);
+        
+        const data = await readData();
+        
+        // 尋找庫存記錄
+        const invIndex = data.giftInventory.findIndex(inv => 
+            inv.userId === userId && inv.giftId === giftId
+        );
+        
+        if (invIndex === -1) {
+            return res.status(404).json({ 
+                success: false, 
+                message: '找不到庫存記錄' 
+            });
+        }
+        
+        // 記錄交易
+        const inventory = data.giftInventory[invIndex];
+        data.giftTransactions.push({
+            id: data.nextIds.giftTransactions++,
+            userId: userId,
+            giftId: giftId,
+            transactionType: 'delete',
+            quantity: -inventory.quantity, // Negative to indicate removal
+            referenceUserId: null,
+            reason: '贈品刪除時自動清理庫存記錄',
+            status: 'completed',
+            createdBy: req.user.id,
+            createdAt: new Date().toISOString()
+        });
+        
+        // 移除庫存記錄
+        data.giftInventory.splice(invIndex, 1);
+        
+        await writeData(data);
+        res.json({ 
+            success: true, 
+            message: '庫存記錄刪除成功',
+            deletedInventory: inventory
+        });
+        
+    } catch (error) {
+        console.error('Delete inventory error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
 // =============================================================================
 // 申請管理 API
 // =============================================================================
@@ -1244,6 +1295,51 @@ app.put(`${BASE_PATH}/api/gifts/:id`, authenticateToken, requireRole(['manager']
         
     } catch (error) {
         console.error('Update gift error:', error);
+        res.status(500).json({ success: false, message: '伺服器錯誤' });
+    }
+});
+
+// 刪除贈品
+app.delete(`${BASE_PATH}/api/gifts/:id`, authenticateToken, requireRole(['manager']), async (req, res) => {
+    try {
+        const giftId = parseInt(req.params.id);
+        
+        const data = await readData();
+        const giftIndex = data.gifts.findIndex(g => g.id === giftId);
+        
+        if (giftIndex === -1) {
+            return res.status(404).json({ 
+                success: false, 
+                message: '找不到贈品' 
+            });
+        }
+        
+        // Remove the gift from the gifts array
+        const deletedGift = data.gifts.splice(giftIndex, 1)[0];
+        
+        // Remove all inventory records for this gift
+        const initialInventoryCount = data.giftInventory.length;
+        data.giftInventory = data.giftInventory.filter(inv => inv.giftId !== giftId);
+        const removedInventoryCount = initialInventoryCount - data.giftInventory.length;
+        
+        // Remove all gift requests for this gift
+        const initialRequestsCount = data.giftRequests.length;
+        data.giftRequests = data.giftRequests.filter(req => req.giftId !== giftId);
+        const removedRequestsCount = initialRequestsCount - data.giftRequests.length;
+        
+        // Save the updated data
+        await writeData(data);
+        
+        res.json({ 
+            success: true, 
+            message: `贈品刪除成功，同時刪除了 ${removedInventoryCount} 筆庫存記錄和 ${removedRequestsCount} 筆申請記錄`,
+            deletedGift,
+            removedInventoryCount,
+            removedRequestsCount
+        });
+        
+    } catch (error) {
+        console.error('Delete gift error:', error);
         res.status(500).json({ success: false, message: '伺服器錯誤' });
     }
 });
