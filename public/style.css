@@ -1838,3 +1838,126 @@ body {
     font-size: var(--font-size-xs);
   }
 }
+
+/* Store and Gift Management Styles */
+.stores-header,
+.gifts-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.stores-list,
+.gifts-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.store-item,
+.gift-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  transition: all 0.2s ease;
+}
+
+.store-item:hover,
+.gift-item:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.store-info,
+.gift-info {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.store-code,
+.gift-code {
+  font-weight: 600;
+  color: var(--color-primary);
+  font-family: monospace;
+}
+
+.store-name,
+.gift-name {
+  font-weight: 600;
+}
+
+.store-address,
+.gift-description {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.store-category,
+.gift-category {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.store-status,
+.gift-status {
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  min-width: 60px;
+}
+
+.store-status.active,
+.gift-status.active {
+  background: var(--color-success);
+  color: white;
+}
+
+.store-status.inactive,
+.gift-status.inactive {
+  background: var(--color-danger);
+  color: white;
+}
+
+.store-actions,
+.gift-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn--xs {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  min-height: auto;
+}
+
+/* Responsive adjustments for store/gift items */
+@media (max-width: 768px) {
+  .store-info,
+  .gift-info {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  
+  .store-item,
+  .gift-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .store-actions,
+  .gift-actions {
+    justify-content: center;
+    margin-top: 1rem;
+  }
+}
