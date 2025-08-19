@@ -3118,9 +3118,11 @@ Stores: ${state.stores}`;
                 console.log(`Gift ${gift.giftName} has ${inventoryUsingGift.length} inventory records that will be automatically deleted`);
 
                 // Now delete the gift itself
+                console.log('Sending DELETE request to /api/gifts/' + giftId);
                 const response = await this.apiCall(`/api/gifts/${giftId}`, {
                     method: 'DELETE'
                 });
+                console.log('Delete gift response:', response);
 
                 if (response.success) {
                     // The server response includes the counts of removed records
