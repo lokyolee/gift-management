@@ -2688,7 +2688,7 @@ Stores: ${state.stores}`;
                                 storeCode: row['門店編號'],
                                 storeName: row['門店名稱'],
                                 address: row['地址'] || '',
-                                status: row['狀態'] === '停用' ? 'active'
+                                status: row['狀態'] === '停用' ? 'inactive' : 'active'
                             })
                         });
                     }
